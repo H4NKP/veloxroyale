@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  /* Tema oscuro inspirado en Pterodactyl */
+  --bg-primary: #0b0d14;
+  /* Pizarra bien oscura */
+  --bg-secondary: #131a26;
+  /* Un poco más claro para las tarjetas */
+  --bg-tertiary: #192130;
+  /* Inputs y hovers */
+
+  --text-primary: #f1f5f9;
+  /* Slate 100 */
+  --text-secondary: #94a3b8;
+  /* Slate 400 */
+
+  --accent: #3b82f6;
+  /* Blue 500 */
+  --accent-hover: #2563eb;
+  /* Blue 600 */
+
+  --danger: #ef4444;
+  --success: #22c55e;
+
+  --border-color: #2e3b52;
+}
+
+@theme inline {
+  --color-pteroblue: var(--accent);
+  --color-pterodark: var(--bg-primary);
+  --color-pterocard: var(--bg-secondary);
+  --color-pteroinput: var(--bg-tertiary);
+  --color-pterotext: var(--text-primary);
+  --color-pterosub: var(--text-secondary);
+  --color-pteroborder: var(--border-color);
+
+  --font-sans: var(--font-geist-sans), "Inter", sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", monospace;
+}
+
+/* Forzamos el modo oscuro por defecto */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  antialiased: true;
+}
+
+/* Scrollbar custom para que parezca una terminal */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--text-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--bg-primary);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-primary);
+}
