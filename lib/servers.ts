@@ -36,7 +36,9 @@ const initialServers: Server[] = [
         whatsappApiToken: 'mock_whatsapp_token_456',
         powerStatus: 'running',
         created_at: '2024-02-12',
-        subUsers: []
+        subUsers: [
+            { userId: 5, permissions: ['sub-users', 'reservations', 'system'] }
+        ]
     },
     {
         id: 2,

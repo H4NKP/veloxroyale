@@ -125,7 +125,7 @@ export async function deleteMonitor(id: number): Promise<void> {
 
 // Uptime calculation
 export function calculateUptime(monitor: StatusMonitor): string {
-    if (monitor.total_checks === 0) return '100';
+    if (monitor.total_checks === 0) return '0';
     const percentage = (monitor.successful_checks / monitor.total_checks) * 100;
     return percentage.toFixed(1);
 }
@@ -142,4 +142,37 @@ export async function performCheck(monitor: StatusMonitor): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+// Client-side auto-reset logic for local storage mode
+if (typeof window !== 'undefined') {
+    const checkServerRestart = async () => {
+        try {
+            const res = await fetch('/api/system/uptime');
+            if (res.ok) {
+                const data = await res.json();
+                const lastBoot = localStorage.getItem('veloxai_boot_time');
+                const currentBoot = data.bootTime.toString();
+
+                if (lastBoot && lastBoot !== currentBoot) {
+                    console.log('Server restart detected. Resetting monitor stats...');
+                    // Reset stats for all local monitors
+                    monitorsDB = loadMonitors().map(m => ({
+                        ...m,
+                        total_checks: 0,
+                        successful_checks: 0
+                    }));
+                    saveMonitors(monitorsDB);
+                }
+
+                localStorage.setItem('veloxai_boot_time', currentBoot);
+            }
+        } catch (e) {
+            // diverse errors
+        }
+    };
+
+    // Check on load and periodically
+    checkServerRestart();
+    setInterval(checkServerRestart, 60000);
 }

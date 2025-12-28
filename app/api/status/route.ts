@@ -3,6 +3,18 @@ import { query } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
     try {
+        // Lógica de reseteo al iniciar (Server Restart Detection)
+        // Usamos una variable global "lazy" (en serverless esto puede no ser perfecto, pero funciona para VPS/Docker persistente)
+        // o mejor: chequeamos uptime del sistema
+
+        // Simplemente ejecutamos un reset si detectamos que no hay chequeos recientes y el server acaba de arrancar
+        // Pero para simplificar y cumplir el requerimiento de "reset on restart":
+        // Vamos a usar un "global" flag aquí. En Next.js dev server se reinicia, en prod se mantiene mientras el proceso viva.
+        if ((global as any).__velox_uptime_reset !== true) {
+            await query('UPDATE status_monitors SET total_checks = 0, successful_checks = 0');
+            (global as any).__velox_uptime_reset = true;
+        }
+
         const monitors: any = await query('SELECT * FROM status_monitors ORDER BY created_at DESC');
 
         // Lógica de chequeo en segundo plano: si han pasado más de 10 segundos, checkeamos de nuevo

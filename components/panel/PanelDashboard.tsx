@@ -16,8 +16,13 @@ import { triggerSync } from '@/lib/sync';
 import { validateGeminiKey, validateWhatsAppKey, validateWhatsAppCredentials } from '@/lib/ai';
 import { getUserById, type User } from '@/lib/auth';
 import { getReservationsByServerId } from '@/lib/reservations';
-import { SubUserManagement } from '@/components/panel/SubUserManagement';
+import dynamic from 'next/dynamic';
 import { useTranslation } from '@/components/LanguageContext';
+
+const SubUserManagement = dynamic(
+    () => import('@/components/panel/SubUserManagement').then(m => m.SubUserManagement),
+    { ssr: false }
+);
 
 interface PanelDashboardProps {
     defaultUserId?: number;
@@ -30,7 +35,26 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
     const [userServers, setUserServers] = useState<Server[]>([]);
     const [viewMode, setViewMode] = useState<'dashboard' | 'list'>('dashboard');
 
-    const [activeTab, setActiveTab] = useState<'system' | 'reservations' | 'backups' | 'sub-users'>('system');
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Initialize tab from URL or default to 'system'
+    // Initialize tab from URL, LocalStorage, or default to 'system'
+    const tabParam = searchParams.get('tab');
+
+    // We use a lazy initializer for state to access localStorage only on mount
+    const [activeTab, setActiveTab] = useState<'system' | 'reservations' | 'backups' | 'sub-users'>(() => {
+        if (typeof window === 'undefined') return 'system';
+        return (localStorage.getItem('velox_active_tab') as any) || 'system';
+    });
+
+    // Persist active tab changes
+    useEffect(() => {
+        if (activeTab) {
+            localStorage.setItem('velox_active_tab', activeTab);
+        }
+    }, [activeTab]);
+
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [server, setServer] = useState<Server | null>(null);
     const [logs, setLogs] = useState<string[]>([
@@ -41,8 +65,6 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
     const [loading, setLoading] = useState(true);
 
     // URL Params for Deep Linking
-    const searchParams = useSearchParams();
-    const router = useRouter();
 
     const userIdParam = searchParams.get('userId');
     const activeUserId = userIdParam ? Number(userIdParam) : defaultUserId;
@@ -62,6 +84,21 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
         successfulReservations: 0,
         aiConfidence: 0
     });
+
+
+    // Helper for centralized permission logic
+    const hasPermission = (perm: string) => {
+        if (!server || !currentUser) return false;
+
+        // Admins and Owners have full access to all tabs
+        if (currentUser.role === 'admin' || server.userId === currentUser.id) {
+            return true;
+        }
+
+        // Check sub-user permissions
+        const subUser = server.subUsers?.find(su => su.userId === currentUser.id);
+        return subUser?.permissions?.includes(perm) ?? false;
+    };
 
     // ... addLog ...
     const addLog = (msg: string) => {
@@ -99,7 +136,12 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
         const user = await getUserById(activeUserId);
         setCurrentUser(user);
 
-        const myServers = await getServersByUserId(activeUserId);
+        let myServers: Server[] = [];
+        if (user?.role === 'admin') {
+            myServers = await getAllServers();
+        } else {
+            myServers = await getServersByUserId(activeUserId);
+        }
         setUserServers(myServers);
 
         if (myServers.length > 0) {
@@ -119,11 +161,13 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                 if (fresh) loadServerData(fresh);
             }
         } else {
-            setServer(null);
+            console.warn("[Panel Debug] fetchServers returned 0 servers. Keeping existing state if present.");
+            if (!server) setServer(null);
         }
 
         // Update real stats
         if (server) {
+            // ... (keep existing stats logic)
             const reservations = await getReservationsByServerId(server.id, activeUserId);
             setStats({
                 pendingReplies: reservations.filter(r => r.status === 'pending').length,
@@ -133,31 +177,21 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
         }
     };
 
+
+
+
+
     useEffect(() => {
         fetchServers();
 
         const interval = setInterval(() => {
             fetchServers();
-        }, 30000);
+        }, 15000);
 
         return () => clearInterval(interval);
     }, [activeUserId, searchParams, server?.id]);
 
-    useEffect(() => {
-        if (!server || !currentUser) return;
 
-        // Find if user is a sub-user for THIS server
-        const subUserEntry = server.subUsers?.find(su => su.userId === currentUser.id);
-        const effectivePermissions = subUserEntry ? subUserEntry.permissions : (currentUser.role === 'customer' ? ['system', 'reservations', 'backups', 'test-ai', 'sub-users'] : []);
-
-        if (subUserEntry && !effectivePermissions.includes(activeTab)) {
-            // Redirect to first allowed tab
-            const firstAllowed = (['system', 'reservations', 'backups'] as const).find(t =>
-                effectivePermissions.includes(t)
-            );
-            if (firstAllowed) setActiveTab(firstAllowed);
-        }
-    }, [currentUser, activeTab, server]);
 
     const handleSwitchServer = (s: Server) => {
         loadServerData(s);
@@ -382,12 +416,15 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                     </p>
                 </div>
 
-                {/* Submodule Tabs - Hide in List Mode */}
-                {viewMode === 'dashboard' && (
+                {/* Submodule Tabs */}
+                {viewMode === 'dashboard' && currentUser && server && (
                     <div className="flex bg-pterodark border border-pteroborder p-1 rounded-lg">
-                        {(!server?.subUsers?.find(su => su.userId === currentUser?.id) || server?.subUsers?.find(su => su.userId === currentUser?.id)?.permissions.includes('system')) && (
+                        {hasPermission('system') && (
                             <button
-                                onClick={() => setActiveTab('system')}
+                                onClick={() => {
+                                    setActiveTab('system');
+                                    router.push(`?${new URLSearchParams({ ...Object.fromEntries(searchParams.entries()), tab: 'system' }).toString()}`);
+                                }}
                                 className={cn(
                                     "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
                                     activeTab === 'system'
@@ -398,9 +435,12 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                                 <LayoutDashboard size={14} /> {t('system')}
                             </button>
                         )}
-                        {(!server?.subUsers?.find(su => su.userId === currentUser?.id) || server?.subUsers?.find(su => su.userId === currentUser?.id)?.permissions.includes('reservations')) && (
+                        {hasPermission('reservations') && (
                             <button
-                                onClick={() => setActiveTab('reservations')}
+                                onClick={() => {
+                                    setActiveTab('reservations');
+                                    router.push(`?${new URLSearchParams({ ...Object.fromEntries(searchParams.entries()), tab: 'reservations' }).toString()}`);
+                                }}
                                 className={cn(
                                     "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
                                     activeTab === 'reservations'
@@ -411,22 +451,12 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                                 <Calendar size={14} /> {t('reservations')}
                             </button>
                         )}
-                        {(!server?.subUsers?.find(su => su.userId === currentUser?.id) || server?.subUsers?.find(su => su.userId === currentUser?.id)?.permissions.includes('backups')) && (
+                        {hasPermission('sub-users') && (
                             <button
-                                onClick={() => setActiveTab('backups')}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
-                                    activeTab === 'backups'
-                                        ? "bg-pteroblue text-white shadow-lg shadow-pteroblue/20"
-                                        : "text-pterosub hover:text-pterotext"
-                                )}
-                            >
-                                <Database size={14} /> {t('backups')}
-                            </button>
-                        )}
-                        {currentUser?.id === server?.userId && (
-                            <button
-                                onClick={() => setActiveTab('sub-users')}
+                                onClick={() => {
+                                    setActiveTab('sub-users');
+                                    router.push(`?${new URLSearchParams({ ...Object.fromEntries(searchParams.entries()), tab: 'sub-users' }).toString()}`);
+                                }}
                                 className={cn(
                                     "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
                                     activeTab === 'sub-users'
@@ -435,6 +465,22 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                                 )}
                             >
                                 <Users size={14} /> {t('subUsers')}
+                            </button>
+                        )}
+                        {hasPermission('backups') && (
+                            <button
+                                onClick={() => {
+                                    setActiveTab('backups');
+                                    router.push(`?${new URLSearchParams({ ...Object.fromEntries(searchParams.entries()), tab: 'backups' }).toString()}`);
+                                }}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                                    activeTab === 'backups'
+                                        ? "bg-pteroblue text-white shadow-lg shadow-pteroblue/20"
+                                        : "text-pterosub hover:text-pterotext"
+                                )}
+                            >
+                                <Database size={14} /> {t('backups')}
                             </button>
                         )}
                     </div>
@@ -745,8 +791,12 @@ function DashboardContent({ defaultUserId = 2, showReturnToAdmin = false }: Pane
                         )}
 
                         {/* Sub-Users Module */}
-                        {activeTab === 'sub-users' && server && currentUser?.id === server.userId && (
-                            <SubUserManagement server={server} onUpdateServer={setServer} onLogAction={addLog} />
+                        {activeTab === 'sub-users' && server && hasPermission('sub-users') && (
+                            <SubUserManagement
+                                server={server}
+                                onUpdateServer={setServer}
+                                onLogAction={addLog}
+                            />
                         )}
 
                         {/* Backup Module */}

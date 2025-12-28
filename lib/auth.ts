@@ -37,6 +37,14 @@ const initialUsers: User[] = [
         status: 'suspended',
         created_at: '2024-03-05'
     },
+    {
+        id: 5,
+        email: 'subuser@test.com',
+        password: 'password123',
+        role: 'customer',
+        status: 'active',
+        created_at: '2024-04-01'
+    }
 ];
 
 // Load from localStorage or use initial data
