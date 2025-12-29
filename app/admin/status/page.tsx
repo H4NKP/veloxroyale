@@ -24,6 +24,24 @@ export default function AdminStatusPage() {
 
     useEffect(() => {
         fetchMonitors();
+
+        const handleSync = () => {
+            console.log("[Status Sync] Sync event received, refreshing...");
+            fetchMonitors();
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('veloxai_sync', handleSync);
+        }
+
+        const interval = setInterval(fetchMonitors, 30000);
+
+        return () => {
+            clearInterval(interval);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('veloxai_sync', handleSync);
+            }
+        };
     }, []);
 
     const handleAdd = async (e: React.FormEvent) => {

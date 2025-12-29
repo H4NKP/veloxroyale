@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Input } from '@/components/ui/core';
 import { Mail, Save, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useTranslation } from '@/components/LanguageContext';
 
 export default function SmtpServerPage() {
+    const { t } = useTranslation();
     const [logs, setLogs] = useState<string[]>([
         "[SMTP]: Configuration panel initialized",
     ]);
@@ -88,8 +90,8 @@ export default function SmtpServerPage() {
     return (
         <div className="space-y-6">
             <header>
-                <h1 className="text-3xl font-bold text-pterotext">SMTP Server Configuration</h1>
-                <p className="text-pterosub mt-2">Configure email delivery system for password recovery and notifications.</p>
+                <h1 className="text-3xl font-bold text-pterotext">{t('smtpConfigurationTitle')}</h1>
+                <p className="text-pterosub mt-2">{t('smtpConfigurationDesc')}</p>
             </header>
 
             <Card className="border-pteroborder bg-pterodark/40">
@@ -100,13 +102,13 @@ export default function SmtpServerPage() {
                                 <Mail className="text-orange-400" size={24} />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-pterotext">Email Settings</h3>
-                                <p className="text-sm text-pterosub">Configure SMTP credentials for outbound mail.</p>
+                                <h3 className="text-lg font-bold text-pterotext">{t('smtpSettings')}</h3>
+                                <p className="text-sm text-pterosub">{t('smtpSettingsDesc')}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <label className="flex items-center gap-2 text-xs font-bold text-pterosub uppercase cursor-pointer">
-                                <span>Enable SMTP</span>
+                                <span>{t('enableSmtp')}</span>
                                 <input
                                     type="checkbox"
                                     checked={smtpConfig.enabled}
@@ -119,7 +121,7 @@ export default function SmtpServerPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">SMTP Host</label>
+                            <label className="text-xs text-pterosub uppercase font-bold">{t('smtpHost')}</label>
                             <Input
                                 value={smtpConfig.host}
                                 onChange={e => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
@@ -127,7 +129,7 @@ export default function SmtpServerPage() {
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Port</label>
+                            <label className="text-xs text-pterosub uppercase font-bold">{t('port')}</label>
                             <Input
                                 value={smtpConfig.port}
                                 onChange={e => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
@@ -135,7 +137,7 @@ export default function SmtpServerPage() {
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">User / Email</label>
+                            <label className="text-xs text-pterosub uppercase font-bold">{t('smtpUserEmail')}</label>
                             <Input
                                 value={smtpConfig.user}
                                 onChange={e => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
@@ -143,7 +145,7 @@ export default function SmtpServerPage() {
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Password / App Key</label>
+                            <label className="text-xs text-pterosub uppercase font-bold">{t('passwordAppKey')}</label>
                             <Input
                                 type="password"
                                 value={smtpConfig.pass}
@@ -152,7 +154,7 @@ export default function SmtpServerPage() {
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">From Address (Optional)</label>
+                            <label className="text-xs text-pterosub uppercase font-bold">{t('fromAddress')}</label>
                             <Input
                                 value={smtpConfig.from}
                                 onChange={e => setSmtpConfig({ ...smtpConfig, from: e.target.value })}
@@ -164,25 +166,25 @@ export default function SmtpServerPage() {
                     <div className="flex gap-2 pt-2">
                         <Button onClick={handleSaveSmtp} disabled={isTestingSmtp} className="bg-orange-500 hover:bg-orange-600 text-white">
                             <Save size={16} className="mr-2" />
-                            {isTestingSmtp ? 'Saving...' : 'Save Config'}
+                            {isTestingSmtp ? t('saving') : t('saveConfig')}
                         </Button>
                         <Button onClick={handleTestSmtp} disabled={!smtpConfig.host || isTestingSmtp} variant="secondary">
                             <Send size={16} className="mr-2" />
-                            Test Email
+                            {t('testEmail')}
                         </Button>
                     </div>
 
                     {smtpStatus === 'success' && (
                         <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2 text-green-400 text-sm">
                             <CheckCircle2 size={16} />
-                            Configuration saved successfully!
+                            {t('configSaved')}
                         </div>
                     )}
 
                     {smtpStatus === 'error' && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm">
                             <AlertCircle size={16} />
-                            {smtpError || 'Failed to save configuration'}
+                            {smtpError || t('configSaveFailed')}
                         </div>
                     )}
                 </div>
@@ -191,7 +193,7 @@ export default function SmtpServerPage() {
             {/* Activity Log */}
             <Card className="border-pteroborder bg-pterodark/40">
                 <div className="p-6 space-y-4">
-                    <h3 className="text-lg font-bold text-pterotext">Activity Log</h3>
+                    <h3 className="text-lg font-bold text-pterotext">{t('activityLog')}</h3>
                     <div className="bg-black/40 rounded-lg p-4 font-mono text-xs text-green-400 h-48 overflow-y-auto">
                         {logs.map((log, i) => (
                             <div key={i}>{log}</div>

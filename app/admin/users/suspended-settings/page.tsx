@@ -6,7 +6,7 @@ import { Save, Plus, X, Mail, Search, Ban, CheckCircle, AlertTriangle } from 'lu
 import { getSuspendedPageSettings, updateSuspendedPageSettings } from '@/lib/suspended-settings';
 import { getAllUsers, updateUser, type User } from '@/lib/auth';
 import { triggerSync } from '@/lib/sync';
-import { Modal } from '@/components/ui/modal';
+import { Sheet } from '@/components/ui/sheet';
 import { useTranslation } from '@/components/LanguageContext';
 
 export default function SuspendedSettingsPage() {
@@ -282,39 +282,40 @@ export default function SuspendedSettingsPage() {
                 </div>
             </div>
 
-            {/* Confirmation Modal */}
-            <Modal
+            {/* Confirmation Sheet */}
+            <Sheet
                 isOpen={isConfirmModalOpen}
                 onClose={() => setIsConfirmModalOpen(false)}
                 title={userToUpdate?.status === 'active' ? t('confirmSuspension') : t('confirmActivation')}
             >
-                <div className="space-y-4 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-pteroblue/10 flex items-center justify-center mb-2">
-                        <AlertTriangle className="text-pteroblue" size={24} />
+                <div className="space-y-6 text-center">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-pteroblue/10 flex items-center justify-center mb-2 animate-pulse">
+                        <AlertTriangle className="text-pteroblue" size={32} />
                     </div>
 
                     <div>
-                        <p className="text-pterotext font-medium">
+                        <p className="text-pterotext font-bold text-lg">
                             {userToUpdate?.status === 'active' ? t('confirmSuspensionMsg') : t('confirmActivationMsg')}
                         </p>
-                        <p className="text-sm text-pterosub mt-1">
+                        <p className="text-sm text-pterosub mt-2 font-mono bg-pterodark p-2 rounded border border-pteroborder">
                             {userToUpdate?.email}
                         </p>
                     </div>
 
-                    <div className="flex gap-3 justify-center pt-2">
-                        <Button variant="ghost" onClick={() => setIsConfirmModalOpen(false)}>
-                            {t('cancel')}
-                        </Button>
+                    <div className="pt-6 border-t border-pteroborder flex flex-col gap-3">
                         <Button
                             variant={userToUpdate?.status === 'active' ? 'danger' : 'primary'}
                             onClick={handleConfirmSuspension}
+                            className="w-full h-12 text-sm font-bold uppercase tracking-wider"
                         >
-                            {userToUpdate?.status === 'active' ? t('suspendUser') : t('activeStatus')}
+                            {userToUpdate?.status === 'active' ? t('suspendUser') : t('unsuspendUser')}
+                        </Button>
+                        <Button variant="ghost" className="w-full" onClick={() => setIsConfirmModalOpen(false)}>
+                            {t('cancel')}
                         </Button>
                     </div>
                 </div>
-            </Modal>
+            </Sheet>
         </>
     );
 }

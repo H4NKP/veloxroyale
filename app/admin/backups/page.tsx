@@ -17,7 +17,7 @@ import {
     CheckCircle2,
     Upload
 } from 'lucide-react';
-import { Modal } from '@/components/ui/modal';
+import { Sheet } from '@/components/ui/sheet';
 import { useTranslation } from '@/components/LanguageContext';
 
 interface Backup {
@@ -460,8 +460,8 @@ export default function BackupsPage() {
                 </div>
             </div>
 
-            {/* Restore Confirmation Modal */}
-            <Modal
+            {/* Restore Confirmation Sheet */}
+            <Sheet
                 isOpen={isRestoreModalOpen}
                 onClose={() => {
                     if (!isRestoring) {
@@ -472,7 +472,7 @@ export default function BackupsPage() {
                 }}
                 title={t('rollbackSystem')}
             >
-                <div className="space-y-4">
+                <div className="space-y-6">
                     <div className="p-4 rounded-lg bg-pteroblue/10 border border-pteroblue/20">
                         <p className="text-sm text-pteroblue font-semibold mb-2">
                             {t('criticalRestoreWarning')}
@@ -495,7 +495,7 @@ export default function BackupsPage() {
                         </label>
                         <input
                             type="text"
-                            className="w-full bg-pteroinput border border-pteroborder text-pterotext rounded-md px-3 py-2 outline-none focus:border-pteroblue focus:ring-1 focus:ring-pteroblue transition-all"
+                            className="w-full bg-pterodark border border-pteroborder text-pterotext rounded-md px-3 py-2 outline-none focus:border-pteroblue transition-all"
                             placeholder={t('confirmRestoreInput')}
                             value={restoreConfirmText}
                             onChange={(e) => setRestoreConfirmText(e.target.value)}
@@ -503,22 +503,12 @@ export default function BackupsPage() {
                         />
                     </div>
 
-                    <div className="pt-4 flex justify-end gap-3">
-                        <Button
-                            variant="ghost"
-                            onClick={() => {
-                                setIsRestoreModalOpen(false);
-                                setSelectedBackup(null);
-                                setRestoreConfirmText('');
-                            }}
-                            disabled={isRestoring}
-                        >
-                            {t('cancel')}
-                        </Button>
+                    <div className="pt-6 border-t border-pteroborder flex flex-col gap-3">
                         <Button
                             variant="primary"
                             onClick={handleRestore}
                             disabled={restoreConfirmText !== t('confirmRestoreInput') || isRestoring}
+                            className="w-full h-12 text-sm font-bold uppercase tracking-wider"
                         >
                             {isRestoring ? (
                                 <>
@@ -532,9 +522,21 @@ export default function BackupsPage() {
                                 </>
                             )}
                         </Button>
+                        <Button
+                            variant="ghost"
+                            className="w-full"
+                            onClick={() => {
+                                setIsRestoreModalOpen(false);
+                                setSelectedBackup(null);
+                                setRestoreConfirmText('');
+                            }}
+                            disabled={isRestoring}
+                        >
+                            {t('cancel')}
+                        </Button>
                     </div>
                 </div>
-            </Modal>
+            </Sheet>
         </div>
     );
 }

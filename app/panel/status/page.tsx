@@ -12,6 +12,8 @@ export default function StatusWallPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    const [countdown, setCountdown] = useState(10);
+
     const fetchMonitors = async () => {
         const data = await getAllMonitors();
         setMonitors(data);
@@ -21,9 +23,19 @@ export default function StatusWallPage() {
 
     useEffect(() => {
         fetchMonitors();
-        // 10 second refresh loop
-        const interval = setInterval(fetchMonitors, 10000);
-        return () => clearInterval(interval);
+
+        // Countdown timer implementation
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    fetchMonitors();
+                    return 10;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
     }, []);
 
     const allSystemsOperational = monitors.length > 0 && monitors.every(m => m.status === 'active' || m.status === 'maintenance');
@@ -44,7 +56,7 @@ export default function StatusWallPage() {
 
                 <div className="flex items-center justify-center gap-2 text-[10px] text-pterosub font-bold uppercase tracking-widest">
                     <Clock size={12} />
-                    {t('lastUpdated')}: {lastUpdated.toLocaleTimeString()} ({t('autoRefresh')})
+                    {t('lastUpdated')}: {lastUpdated.toLocaleTimeString()} (Auto refresh in {countdown}s)
                 </div>
             </header>
 

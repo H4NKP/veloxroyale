@@ -5,9 +5,11 @@ import { useState, useEffect } from 'react';
 import { Server, updateServer, getServersByUserId } from '@/lib/servers';
 import { Settings, MessageSquare, Check, Globe } from 'lucide-react';
 import clsx from 'clsx';
+import { useSession } from '@/hooks/useSession';
 
 export default function SettingsPage() {
     const { t, language, setLanguage } = useTranslation();
+    const { user } = useSession();
     const [servers, setServers] = useState<Server[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -19,12 +21,13 @@ export default function SettingsPage() {
         // Ensuring we grab servers for a specific user to edit their config
         // Hardcoded userId 2 based on previous context or TODO: get real user
         const fetchSettings = async () => {
+            if (!user) return;
             try {
                 // We use a mock ID or fetch logic. For now, let's try to get servers logic.
                 // Since this is a client component, we might rely on an API or the lib if compatible.
                 // The lib functions are async but use localStorage on client side which is fine.
                 // Ideally this should be an API call, but we'll stick to the existing pattern found in codebase.
-                const userServers = await getServersByUserId(2); // Mock User ID from previous files
+                const userServers = await getServersByUserId(user.id);
                 if (userServers.length > 0) {
                     setServers(userServers);
                     const s = userServers[0];
@@ -38,7 +41,7 @@ export default function SettingsPage() {
         };
 
         fetchSettings();
-    }, []);
+    }, [user]);
 
 
     if (loading) {

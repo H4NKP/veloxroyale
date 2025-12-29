@@ -9,8 +9,11 @@ export async function GET() {
     const minutes = Math.floor((uptimeSeconds % 3600) / 60);
     const seconds = Math.floor(uptimeSeconds % 60);
 
+    const bootTime = Date.now() - (uptimeSeconds * 1000);
+
     return NextResponse.json({
         uptimeSeconds,
-        uptimeFormatted: `${hours}h ${minutes}m ${seconds}s`
+        uptimeFormatted: `${hours}h ${minutes}m ${seconds}s`,
+        bootTime
     });
 }

@@ -3,6 +3,7 @@
 import { Sidebar } from '@/components/layout/sidebar';
 import { SyncListener } from '@/components/layout/SyncListener';
 import { useEffect, useState } from 'react';
+import { SessionGuard } from '@/components/auth/SessionGuard';
 
 export default function AdminLayout({
     children,
@@ -16,6 +17,8 @@ export default function AdminLayout({
         const savedWallpaper = localStorage.getItem('velox_admin_bg');
         if (savedWallpaper === 'custom') {
             setWallpaper('/wallpaper.jpeg');
+        } else if (savedWallpaper === 'custom_2') {
+            setWallpaper('/wallpaper2.jpg');
         } else {
             setWallpaper(null);
         }
@@ -38,13 +41,15 @@ export default function AdminLayout({
             )}
 
             <div className="relative z-10">
-                <SyncListener />
-                <Sidebar type="admin" />
-                <main className="p-8">
-                    <div className="max-w-7xl mx-auto space-y-6">
-                        {children}
-                    </div>
-                </main>
+                <SessionGuard allowedRoles={['admin']}>
+                    <SyncListener />
+                    <Sidebar type="admin" />
+                    <main className="p-8">
+                        <div className="max-w-7xl mx-auto space-y-6">
+                            {children}
+                        </div>
+                    </main>
+                </SessionGuard>
             </div>
         </div>
     );

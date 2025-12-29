@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Card, Button, Input, Badge } from '@/components/ui/core';
-import { User as UserIcon, Mail, Key, Shield, Calendar, Save, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { User as UserIcon, Mail, Key, Shield, Calendar, Save, Eye, EyeOff, CheckCircle2, Store } from 'lucide-react';
 import { getUserById, updateUser, type User } from '@/lib/auth';
+import { useSession } from '@/hooks/useSession';
+import { useTranslation } from '@/components/LanguageContext';
 
 export default function UserProfilePage() {
-    const searchParams = useSearchParams();
+    const { t } = useTranslation();
+    const { user: sessionUser } = useSession();
     const [user, setUser] = useState<User | null>(null);
     const [email, setEmail] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
@@ -17,26 +19,25 @@ export default function UserProfilePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    // Dynamic active user from URL
-    const activeUserId = Number(searchParams.get('userId')) || 2;
-
     useEffect(() => {
         const load = async () => {
-            const userData = await getUserById(activeUserId);
+            // Wait for session user
+            if (!sessionUser) return;
+
+            const userData = await getUserById(sessionUser.id);
             if (userData) {
                 setUser(userData);
                 setEmail(userData.email);
             }
         };
         load();
-    }, [activeUserId]);
+    }, [sessionUser]);
 
     const handleSave = async () => {
         if (!user) return;
 
         if (newPassword && newPassword !== confirmPassword) {
-            alert('the password doesnt match');
-            setMessage({ type: 'error', text: 'Passwords do not match.' });
+            setMessage({ type: 'error', text: t('passwordsDoNotMatch') });
             return;
         }
 
@@ -46,7 +47,7 @@ export default function UserProfilePage() {
         const updates: Partial<User> = { email };
         if (newPassword) {
             if (!currentPassword) {
-                setMessage({ type: 'error', text: 'Current password is required to set a new password.' });
+                setMessage({ type: 'error', text: t('currentPasswordRequired') });
                 setIsSaving(false);
                 return;
             }
@@ -62,7 +63,7 @@ export default function UserProfilePage() {
             if (updated) setUser(updated);
 
             setIsSaving(false);
-            setMessage({ type: 'success', text: 'Profile updated successfully!' });
+            setMessage({ type: 'success', text: t('profileUpdated') });
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
@@ -72,13 +73,13 @@ export default function UserProfilePage() {
         }
     };
 
-    if (!user) return <div className="p-8 text-center text-pterosub">Loading profile...</div>;
+    if (!user) return <div className="p-8 text-center text-pterosub">{t('loadingProfile')}</div>;
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
             <header>
-                <h1 className="text-3xl font-bold text-pterotext">My Profile</h1>
-                <p className="text-pterosub mt-2">Manage your account information and security settings.</p>
+                <h1 className="text-3xl font-bold text-pterotext">{t('profile')}</h1>
+                <p className="text-pterosub mt-2">{t('profileDesc')}</p>
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -97,12 +98,25 @@ export default function UserProfilePage() {
                     <div className="w-full space-y-4 pt-6 border-t border-pteroborder">
                         <div className="flex items-center gap-3 text-sm">
                             <Shield size={16} className="text-pterosub" />
-                            <span className="text-pterotext">Status:</span>
-                            <span className="ml-auto text-green-400 font-medium">Active</span>
+                            <span className="text-pterotext">{t('status')}:</span>
+                            <span className="ml-auto text-green-400 font-medium capitalize">{user.status}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                            <Store size={16} className="text-pterosub" />
+                            <span className="text-pterotext">{t('hiredPlan')}:</span>
+                            <span className={cn(
+                                "ml-auto font-bold text-xs px-2 py-0.5 rounded",
+                                user.plan === 'Basic Plan' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
+                                    user.plan === 'Growth Plan' ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+                                        user.plan === 'Premium Plan' ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" :
+                                            "bg-pteroblue/10 text-pteroblue border border-pteroblue/20"
+                            )}>
+                                {user.plan || 'No Plan'}
+                            </span>
                         </div>
                         <div className="flex items-center gap-3 text-sm">
                             <Calendar size={16} className="text-pterosub" />
-                            <span className="text-pterotext">Joined:</span>
+                            <span className="text-pterotext">{t('created')}:</span>
                             <span className="ml-auto text-pterosub">{user.created_at}</span>
                         </div>
                     </div>
@@ -122,10 +136,10 @@ export default function UserProfilePage() {
 
                     <section className="space-y-4">
                         <h3 className="text-sm font-bold text-pterosub uppercase tracking-widest flex items-center gap-2">
-                            <Mail size={16} className="text-pteroblue" /> Account Information
+                            <Mail size={16} className="text-pteroblue" /> {t('accountInformation')}
                         </h3>
                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-pterosub">Email Address</label>
+                            <label className="text-xs font-medium text-pterosub">{t('emailAddress')}</label>
                             <Input
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
@@ -136,18 +150,18 @@ export default function UserProfilePage() {
 
                     <section className="space-y-4">
                         <h3 className="text-sm font-bold text-pterosub uppercase tracking-widest flex items-center gap-2">
-                            <Key size={16} className="text-pteroblue" /> Security & Password
+                            <Key size={16} className="text-pteroblue" /> {t('securityPassword')}
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="md:col-span-2 space-y-2">
-                                <label className="text-xs font-medium text-pterosub">Current Password *</label>
+                                <label className="text-xs font-medium text-pterosub">{t('currentPassword')}</label>
                                 <Input
                                     type={showPassword ? "text" : "password"}
                                     value={currentPassword}
                                     onChange={e => setCurrentPassword(e.target.value)}
                                     placeholder="Enter current password"
                                 />
-                                <p className="text-[10px] text-pterosub italic">Required when changing password for security.</p>
+                                <p className="text-[10px] text-pterosub italic">{t('passwordSecurityNote')}</p>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-pterosub">New Password</label>
@@ -167,7 +181,7 @@ export default function UserProfilePage() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs font-medium text-pterosub">Confirm Password</label>
+                                <label className="text-xs font-medium text-pterosub">{t('confirmPasswordLabel')}</label>
                                 <Input
                                     type={showPassword ? "text" : "password"}
                                     value={confirmPassword}
@@ -176,7 +190,7 @@ export default function UserProfilePage() {
                                 />
                             </div>
                         </div>
-                        <p className="text-[10px] text-pterosub italic">Leave password fields blank if you do not want to change it.</p>
+                        <p className="text-[10px] text-pterosub italic">{t('passwordBlankNote')}</p>
                     </section>
 
                     <div className="pt-6 border-t border-pteroborder flex justify-end">
@@ -188,11 +202,11 @@ export default function UserProfilePage() {
                             {isSaving ? (
                                 <span className="flex items-center gap-2">
                                     <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Saving...
+                                    {t('saving')}
                                 </span>
                             ) : (
                                 <>
-                                    <Save size={16} className="mr-2" /> Save Changes
+                                    <Save size={16} className="mr-2" /> {t('saveChanges')}
                                 </>
                             )}
                         </Button>

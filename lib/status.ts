@@ -125,7 +125,7 @@ export async function deleteMonitor(id: number): Promise<void> {
 
 // Uptime calculation
 export function calculateUptime(monitor: StatusMonitor): string {
-    if (monitor.total_checks === 0) return '0';
+    if (monitor.total_checks === 0) return '100.0';
     const percentage = (monitor.successful_checks / monitor.total_checks) * 100;
     return percentage.toFixed(1);
 }

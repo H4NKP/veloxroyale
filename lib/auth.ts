@@ -9,6 +9,9 @@ export interface User {
     password: string; // In real app, this would be hashed
     role: 'admin' | 'customer';
     status: 'active' | 'suspended';
+    plan?: 'Basic Plan' | 'Growth Plan' | 'Premium Plan' | 'Custom Plan';
+    support_priority?: 'tier_1' | 'tier_2' | 'tier_3' | 'tier_4' | 'tier_5' | 'tier_6' | 'tier_7' | 'tier_8';
+    support_suspended?: boolean;
     suspension_message?: string;
     reset_token?: string;
     reset_token_expiry?: string;
@@ -23,6 +26,9 @@ const initialUsers: User[] = [
         password: 'admin',
         role: 'admin',
         status: 'active',
+        plan: 'Custom Plan',
+        support_priority: 'tier_8',
+        support_suspended: false,
         created_at: '2024-01-15'
     },
     {
@@ -31,6 +37,9 @@ const initialUsers: User[] = [
         password: 'password123',
         role: 'customer',
         status: 'active',
+        plan: 'Premium Plan',
+        support_priority: 'tier_4',
+        support_suspended: false,
         created_at: '2024-02-10'
     },
     {
@@ -39,6 +48,7 @@ const initialUsers: User[] = [
         password: 'password123',
         role: 'customer',
         status: 'suspended',
+        plan: 'Growth Plan',
         created_at: '2024-03-05'
     },
     {
@@ -47,6 +57,7 @@ const initialUsers: User[] = [
         password: 'password123',
         role: 'customer',
         status: 'active',
+        plan: 'Basic Plan',
         created_at: '2024-04-01'
     }
 ];
@@ -122,7 +133,7 @@ export async function authenticateUser(identifier: string, password: string): Pr
 }
 
 export async function getAllUsers(): Promise<User[]> {
-    if (typeof window === 'undefined') return [];
+    // if (typeof window === 'undefined') return []; // Removed to allow server-side mock lookup
 
     if (await isRemoteDb()) {
         const res = await fetch('/api/users?adminAccess=true');
@@ -135,7 +146,7 @@ export async function getAllUsers(): Promise<User[]> {
 }
 
 export async function getUserById(id: number): Promise<User | null> {
-    if (typeof window === 'undefined') return null;
+    // if (typeof window === 'undefined') return null; // Removed to allow server-side mock lookup
 
     if (await isRemoteDb()) {
         const res = await fetch(`/api/users?id=${id}`);
@@ -166,6 +177,7 @@ export async function createUser(userData: Omit<User, 'id' | 'created_at'>): Pro
     const dataToSave = { ...userData, password: hashedPassword };
 
     if (remote) {
+        // ... existing remote logic ...
         const res = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -173,6 +185,13 @@ export async function createUser(userData: Omit<User, 'id' | 'created_at'>): Pro
         });
         newUser = await res.json();
     } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) {
+                throw new Error("System is in Ubuntu Server Mode. Local storage is disabled. Please enable MySQL Database.");
+            }
+        }
+
         newUser = {
             ...userData,
             password: hashedPassword,
@@ -210,6 +229,11 @@ export async function updateUser(id: number, updates: Partial<User>, resetToken?
         }
 
         // Local Mode Check
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local updates disabled.");
+        }
+
         usersDB = loadUsers();
         const user = usersDB.find(u => u.id === id);
         if (!user) return null;
@@ -235,6 +259,11 @@ export async function updateUser(id: number, updates: Partial<User>, resetToken?
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, resetToken, ...updates })
         });
+    } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local updates disabled.");
+        }
     }
 
     usersDB = loadUsers();
@@ -257,6 +286,11 @@ export async function deleteUser(id: number): Promise<boolean> {
     const remote = await isRemoteDb();
     if (remote) {
         await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
+    } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local delete disabled.");
+        }
     }
 
     usersDB = loadUsers();

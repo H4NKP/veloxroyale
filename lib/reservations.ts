@@ -9,7 +9,7 @@ export interface Reservation {
     date: string;
     time: string;
     partySize: number;
-    status: 'confirmed' | 'pending' | 'cancelled';
+    status: 'confirmed' | 'pending' | 'cancelled' | 'archived';
     source: 'WhatsApp' | 'Web' | 'Phone';
     createdAt: string;
     notes?: string;
@@ -240,7 +240,15 @@ export async function updateReservation(id: number, updates: Partial<Reservation
     return reservationsDB[index];
 }
 
+/**
+ * Moves a reservation to 'archived' status. 
+ * To permanently delete, check for existing 'archived' status or add a new function.
+ */
 export async function deleteReservation(id: number): Promise<boolean> {
+    return !!(await updateReservationStatus(id, 'archived'));
+}
+
+export async function hardDeleteReservation(id: number): Promise<boolean> {
     if (typeof window === 'undefined') {
         const remote = await isRemoteDb();
         if (remote) {
@@ -249,7 +257,7 @@ export async function deleteReservation(id: number): Promise<boolean> {
                 await query('DELETE FROM reservations WHERE id = ?', [id]);
                 return true;
             } catch (e) {
-                console.error("[deleteReservation] Server SQL Error:", e);
+                console.error("[hardDeleteReservation] Server SQL Error:", e);
                 return false;
             }
         }

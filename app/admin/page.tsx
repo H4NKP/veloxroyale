@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react';
 import { Card, cn } from '@/components/ui/core';
 import Link from 'next/link';
-import { Server, Users, Activity, ExternalLink } from 'lucide-react';
+import { Server, Users, Activity, ExternalLink, AlertTriangle } from 'lucide-react';
 import { getAllServers, type Server as ServerType } from '@/lib/servers';
 import { getAllUsers, type User } from '@/lib/auth';
 import { getReservationsByServerId } from '@/lib/reservations';
 import { useTranslation } from '@/components/LanguageContext';
+import { useSession } from '@/hooks/useSession';
+import { isExpired } from '@/lib/timezone';
 
 export default function AdminDashboard() {
+    const { user } = useSession();
     const [servers, setServers] = useState<ServerType[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [totalReservations, setTotalReservations] = useState(0);
@@ -18,9 +21,9 @@ export default function AdminDashboard() {
 
     const { t } = useTranslation();
 
-    useEffect(() => {
-        const load = async () => {
-            setIsLoading(true);
+    const load = async () => {
+        setIsLoading(true);
+        try {
             const s = await getAllServers();
             setServers(s);
             const u = await getAllUsers();
@@ -33,21 +36,40 @@ export default function AdminDashboard() {
                 total += res.filter(r => r.status === 'confirmed').length;
             }
             setTotalReservations(total);
-            setTotalReservations(total);
 
             // Check DB Status
-            try {
-                const dbRes = await fetch('/api/db/config');
-                const dbConfig = await dbRes.json();
-                setDbStatus(dbConfig);
-            } catch (error) {
-                console.error("Failed to check DB status:", error);
-                setDbStatus({ enabled: false });
-            }
-
+            const dbRes = await fetch('/api/db/config');
+            const dbConfig = await dbRes.json();
+            setDbStatus(dbConfig);
+        } catch (error) {
+            console.error("Failed to load dashboard data:", error);
+        } finally {
             setIsLoading(false);
-        };
+        }
+    };
+
+    useEffect(() => {
         load();
+
+        // Sync with global events
+        const handleSync = () => {
+            console.log("[Admin Sync] Sync event received, refreshing...");
+            load();
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('veloxai_sync', handleSync);
+        }
+
+        // Periodic refresh
+        const interval = setInterval(load, 30000);
+
+        return () => {
+            clearInterval(interval);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('veloxai_sync', handleSync);
+            }
+        };
     }, []);
 
     const customers = allUsers.filter(u => u.role === 'customer');
@@ -119,14 +141,23 @@ export default function AdminDashboard() {
                             servers.map((server) => (
                                 <tr key={server.id} className="hover:bg-pteroborder/30 transition-colors">
                                     <td className="p-4">
-                                        <span className={cn(
-                                            "inline-flex h-3 w-3 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.4)]",
-                                            server.status === 'active' ? "bg-green-500" : "bg-red-500"
-                                        )}></span>
+                                        {server.validUntil && isExpired(server.validUntil) ? (
+                                            <div className="relative group">
+                                                <AlertTriangle size={16} className="text-red-500 animate-pulse" />
+                                                <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-black/90 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                                                    {t('expired')}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className={cn(
+                                                "inline-flex h-3 w-3 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.4)]",
+                                                server.status === 'active' ? "bg-green-500" : "bg-red-500"
+                                            )}></span>
+                                        )}
                                     </td>
                                     <td className="p-4 text-pterotext font-medium">{server.name}</td>
                                     <td className="p-4 text-right">
-                                        <Link href={`/admin/monitor?userId=${server.userId}&fromAdmin=true&serverId=${server.id}`}>
+                                        <Link href={`/admin/monitor?fromAdmin=true&serverId=${server.id}`}>
                                             <button className="p-2 hover:bg-pteroborder rounded-md text-pterosub hover:text-white transition-colors">
                                                 <ExternalLink size={16} />
                                             </button>

@@ -6,28 +6,21 @@ import { Console } from '@/components/ui/console';
 import { useTranslation } from '@/components/LanguageContext';
 import {
     Terminal,
-    Github,
-    Download,
-    RefreshCw,
     Server,
     Cpu,
     HardDrive,
     Activity,
     Clock,
-    CheckCircle2,
-    AlertCircle,
-    Zap,
-    Save,
-    Edit2,
-    ShieldCheck,
     Database,
-    Trash2,
-    Mail,
-    Image,
-    Layout
+    Zap,
+    RefreshCw,
+    AlertCircle,
+    Trash2
 } from 'lucide-react';
-import { Modal } from '@/components/ui/modal';
+import { Sheet } from '@/components/ui/sheet';
 import { getLicenseInfo } from '@/lib/license';
+import { getAllServers } from '@/lib/servers';
+import { getReservationsByServerId } from '@/lib/reservations';
 
 export default function AdminSystemPage() {
     const { t } = useTranslation();
@@ -35,16 +28,6 @@ export default function AdminSystemPage() {
         "[System]: VeloxAI Admin Panel initialized",
         "[System]: All services operational",
     ]);
-    const [isUpdating, setIsUpdating] = useState(false);
-    const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'updating' | 'success' | 'error'>('idle');
-    const [hasUpdates, setHasUpdates] = useState(false);
-    const [latestVersion, setLatestVersion] = useState('v1.0');
-
-    // Config de los repos
-    const [repoUrl, setRepoUrl] = useState('');
-    const [repoBranch, setRepoBranch] = useState('');
-    const [isEditingRepo, setIsEditingRepo] = useState(false);
-    const [isSavingRepo, setIsSavingRepo] = useState(false);
 
     const [systemStats, setSystemStats] = useState({
         uptime: '0h 0m',
@@ -61,9 +44,11 @@ export default function AdminSystemPage() {
         database: '',
         enabled: false
     });
-    const [isTestingDb, setIsTestingDb] = useState(false);
-    const [dbStatus, setDbStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const [dbError, setDbError] = useState('');
+
+    // Keeping dbConfig just to show status in Info panel, but removing edit logic?
+    // User asked to move DB setup. 
+    // In Info panel (line 527) it uses dbConfig.enabled.
+    // I should create a lightweight fetch for status or just keep the state but remove the UI editing.
 
     const [smtpError, setSmtpError] = useState('');
 
@@ -81,16 +66,14 @@ export default function AdminSystemPage() {
 
     useEffect(() => {
         // Pillamos la config del repo del localStorage
-        const savedRepo = localStorage.getItem('veloxai_repo_url') || 'https://github.com/H4NKP/veloxroyal';
-        const savedBranch = localStorage.getItem('veloxai_repo_branch') || 'main';
-        setRepoUrl(savedRepo);
-        setRepoBranch(savedBranch);
+        // const savedRepo = localStorage.getItem('veloxai_repo_url') || 'https://github.com/H4NKP/veloxroyal';
+        // const savedBranch = localStorage.getItem('veloxai_repo_branch') || 'main';
+        // Removed local state for these as moved to Updates module
 
         // Calculamos las estadísticas del sistema
         const updateStats = async () => {
             try {
-                const servers = JSON.parse(localStorage.getItem('veloxai_servers') || '[]');
-                const reservations = JSON.parse(localStorage.getItem('veloxai_reservations') || '[]');
+                const servers = await getAllServers();
                 const lastBackup = localStorage.getItem('veloxai_last_backup') || 'Never';
 
                 // Fetch real uptime from server
@@ -105,10 +88,17 @@ export default function AdminSystemPage() {
                     console.error("Failed to fetch uptime", err);
                 }
 
+                // Compute reservations
+                let totalRes = 0;
+                for (const server of servers) {
+                    const res = await getReservationsByServerId(server.id);
+                    totalRes += res.filter(r => r.status === 'confirmed').length;
+                }
+
                 setSystemStats({
                     uptime: realUptime,
                     activeServers: servers.filter((s: any) => s.status === 'active').length,
-                    totalReservations: reservations.length,
+                    totalReservations: totalRes,
                     lastBackup
                 });
             } catch (e) {
@@ -129,102 +119,56 @@ export default function AdminSystemPage() {
             })
             .catch(err => console.error("Failed to fetch DB config", err));
 
+        // Sync with global events
+        const handleSync = () => {
+            console.log("[Settings Sync] Sync event received, refreshing stats...");
+            updateStats();
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('veloxai_sync', handleSync);
+        }
+
         const interval = setInterval(updateStats, 30000);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('veloxai_sync', handleSync);
+            }
+        };
     }, []);
 
 
+    const [serverMode, setServerMode] = useState<'local' | 'ubuntu'>('local');
 
-    const handleSaveRepoConfig = () => {
-        setIsSavingRepo(true);
-        addLog("Saving repository configuration...");
+    useEffect(() => {
+        // ... (existing effects)
 
-        localStorage.setItem('veloxai_repo_url', repoUrl);
-        localStorage.setItem('veloxai_repo_branch', repoBranch);
+        // Fetch Server Mode
+        fetch('/api/system/mode')
+            .then(res => res.json())
+            .then(data => {
+                if (data.server_mode) setServerMode(data.server_mode);
+            });
+    }, []);
 
-        setTimeout(() => {
-            addLog(`✓ Repository set to: ${repoUrl}`);
-            addLog(`✓ Branch set to: ${repoBranch}`);
-            setIsSavingRepo(false);
-            setIsEditingRepo(false);
-        }, 500);
-    };
-
-    const handleCheckUpdates = async () => {
-        setUpdateStatus('checking');
-        setHasUpdates(false);
-        addLog("Checking for updates from GitHub...");
-        addLog(`Repository: ${repoUrl}`);
-        addLog(`Branch: ${repoBranch}`);
-
-        setTimeout(() => {
-            const currentVersion = 'v1.0';
-            const remoteVersion = 'v1.0'; // En producción, esto se trae de GitHub API
-
-            addLog(`Current version: ${currentVersion}`);
-            addLog(`Latest version: ${remoteVersion}`);
-
-            if (currentVersion !== remoteVersion) {
-                setHasUpdates(true);
-                setLatestVersion(remoteVersion);
-                addLog(`⚠ Update available: ${remoteVersion}`);
-                setUpdateStatus('idle');
-            } else {
-                setHasUpdates(false);
-                addLog("✓ System is up to date");
-                setUpdateStatus('success');
-                setTimeout(() => setUpdateStatus('idle'), 3000);
-            }
-        }, 2000);
-    };
-
-    const handleUpdate = async () => {
-        if (!hasUpdates) {
-            addLog("⚠ No updates available. Run 'Check for Updates' first.");
-            return;
-        }
-
-        const confirmed = confirm(
-            'This will update the panel to the latest version via Git.\n\n' +
-            '✓ Data will be preserved.\n' +
-            '✓ Services may need manual restart if not auto-managed.\n\n' +
-            'Continue?'
-        );
-
-        if (!confirmed) {
-            addLog("Update cancelled by user.");
-            return;
-        }
-
-        setIsUpdating(true);
-        setUpdateStatus('updating');
-        addLog("Starting update process (Git Pull)...");
-
+    const toggleServerMode = async (enabled: boolean) => {
+        const newMode = enabled ? 'ubuntu' : 'local';
         try {
-            const res = await fetch('/api/system/update', { method: 'POST' });
-            const data = await res.json();
-
-            if (data.success) {
-                addLog("✓ Git Pull successful");
-                if (data.logs && data.logs.length > 0) {
-                    data.logs.forEach((l: string) => addLog(l));
+            const res = await fetch('/api/system/mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ server_mode: newMode })
+            });
+            if (res.ok) {
+                setServerMode(newMode);
+                addLog(`Switched to ${newMode === 'ubuntu' ? 'Ubuntu Server' : 'Local'} Mode`);
+                if (newMode === 'ubuntu') {
+                    addLog("Warning: Local storage is now disabled for core services.");
                 }
-
-                addLog("✓ Update completed successfully");
-                setUpdateStatus('success');
-                setHasUpdates(false);
-
-                addLog("Please reload or restart services if needed.");
-            } else {
-                addLog(`✖ Update failed: ${data.message}`);
-                setUpdateStatus('error');
             }
-
-        } catch (error: any) {
-            addLog(`✖ Update Error: ${error.message}`);
-            setUpdateStatus('error');
-        } finally {
-            setIsUpdating(false);
+        } catch (e) {
+            console.error('Failed to toggle server mode', e);
         }
     };
 
@@ -245,63 +189,6 @@ export default function AdminSystemPage() {
                 addLog(`Command executed: ${cmd}`);
             }
         }, 500);
-    };
-
-    const handleTestDb = async () => {
-        setIsTestingDb(true);
-        setDbStatus('idle');
-        setDbError('');
-        addLog("Testing third-party database connection...");
-
-        try {
-            const res = await fetch('/api/db/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dbConfig)
-            });
-            const data = await res.json();
-            if (data.success) {
-                setDbStatus('success');
-                addLog("✓ Database connection successful!");
-            } else {
-                setDbStatus('error');
-                setDbError(data.message);
-                addLog(`✖ Connection failed: ${data.message}`);
-            }
-        } catch (err: any) {
-            setDbStatus('error');
-            setDbError(err.message);
-            addLog(`✖ Network error testing database: ${err.message}`);
-        } finally {
-            setIsTestingDb(false);
-        }
-    };
-
-    const handleInitDb = async () => {
-        if (!confirm("This will initialize the schema in the remote database. Continue?")) return;
-
-        setIsTestingDb(true);
-        addLog("Initializing remote database schema...");
-
-        try {
-            const res = await fetch('/api/db/init', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dbConfig)
-            });
-            const data = await res.json();
-            if (data.success) {
-                setDbConfig(prev => ({ ...prev, enabled: true }));
-                addLog("✓ Database initialized and tables created.");
-                alert("Database linked successfully! The system will now use the third-party server.");
-            } else {
-                addLog(`✖ Initialization failed: ${data.message}`);
-            }
-        } catch (err: any) {
-            addLog(`✖ Error initializing database: ${err.message}`);
-        } finally {
-            setIsTestingDb(false);
-        }
     };
 
     const handleFactoryReset = async () => {
@@ -371,114 +258,6 @@ export default function AdminSystemPage() {
 
             <Card className="border-pteroborder bg-pterodark/40">
                 <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-3 rounded-lg bg-purple-500/10">
-                                <Github className="text-purple-400" size={24} />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-pterotext">{t('githubUpdates')}</h3>
-                                <p className="text-sm text-pterosub">{t('manageUpdates')}</p>
-                            </div>
-                        </div>
-                        {updateStatus === 'success' && (
-                            <Badge variant="green" className="flex items-center gap-1">
-                                <CheckCircle2 size={14} />
-                                {t('upToDate')}
-                            </Badge>
-                        )}
-                        {hasUpdates && (
-                            <Badge variant="blue" className="flex items-center gap-1 bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-                                <AlertCircle size={14} />
-                                {t('updateAvailable')}
-                            </Badge>
-                        )}
-                    </div>
-
-                    <div className="p-4 bg-pteroborder/20 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between">
-                            <p className="text-xs text-pterosub uppercase font-bold">{t('repoConfig')}</p>
-                            {!isEditingRepo && (
-                                <Button onClick={() => setIsEditingRepo(true)} variant="ghost" className="text-xs h-7 px-2">
-                                    <Edit2 size={12} className="mr-1" />
-                                    Edit
-                                </Button>
-                            )}
-                        </div>
-
-                        {isEditingRepo ? (
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('repoUrl')}</label>
-                                    <Input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="e.g., username/repo-name" className="font-mono text-sm" />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('branch')}</label>
-                                    <Input value={repoBranch} onChange={(e) => setRepoBranch(e.target.value)} placeholder="e.g., main, develop" className="font-mono text-sm" />
-                                </div>
-                                <div className="flex gap-2 pt-2">
-                                    <Button onClick={handleSaveRepoConfig} disabled={isSavingRepo} className="bg-green-500 hover:bg-green-600 text-white text-xs h-8">
-                                        <Save size={14} className="mr-1" />
-                                        {isSavingRepo ? 'Saving...' : t('saveChanges')}
-                                    </Button>
-                                    <Button onClick={() => { setIsEditingRepo(false); setRepoUrl(localStorage.getItem('veloxai_repo_url') || 'https://github.com/H4NKP/veloxroyal'); setRepoBranch(localStorage.getItem('veloxai_repo_branch') || 'main'); }} variant="ghost" className="text-xs h-8">
-                                        {t('cancel')}
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-xs text-pterosub uppercase font-bold">Repository</p>
-                                    <p className="text-sm text-pterotext font-mono">{repoUrl}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-pterosub uppercase font-bold">Branch</p>
-                                    <p className="text-sm text-pterotext font-mono">{repoBranch}</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="p-4 bg-pteroborder/20 rounded-lg">
-                        <p className="text-xs text-pterosub uppercase font-bold mb-2">{t('panelVersion')}</p>
-                        <p className="text-sm text-pterotext font-mono">v1.0</p>
-                    </div>
-
-                    <div className="flex gap-3">
-                        <Button onClick={handleCheckUpdates} disabled={updateStatus === 'checking' || updateStatus === 'updating'} className="bg-purple-500 hover:bg-purple-600 text-white">
-                            {updateStatus === 'checking' ? (
-                                <>
-                                    <RefreshCw size={16} className="mr-2 animate-spin" />
-                                    Checking...
-                                </>
-                            ) : (
-                                <>
-                                    <RefreshCw size={16} className="mr-2" />
-                                    {t('checkForUpdates')}
-                                </>
-                            )}
-                        </Button>
-                        <Button onClick={handleUpdate} disabled={!hasUpdates || isUpdating || updateStatus === 'checking'} variant="secondary">
-                            {isUpdating ? (
-                                <>
-                                    <Download size={16} className="mr-2 animate-bounce" />
-                                    Updating...
-                                </>
-                            ) : (
-                                <>
-                                    <Download size={16} className="mr-2" />
-                                    {t('startUpdate')}
-                                </>
-                            )}
-                        </Button>
-                    </div>
-
-                </div>
-            </Card>
-
-            <Card className="border-pteroborder bg-pterodark/40">
-                <div className="p-6 space-y-4">
                     <div className="flex items-center gap-3">
                         <div className="p-3 rounded-lg bg-green-500/10">
                             <Terminal className="text-green-400" size={24} />
@@ -534,97 +313,43 @@ export default function AdminSystemPage() {
                 </div>
             </Card>
 
+            {/* Server Mode Configuration */}
             <Card className="border-pteroborder bg-pterodark/40">
                 <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-3 rounded-lg bg-blue-500/10">
-                                <Database className="text-blue-400" size={24} />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-pterotext">{t('thirdPartyDb')}</h3>
-                                <p className="text-sm text-pterosub">{t('thirdPartyDbDesc')}</p>
-                            </div>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-lg bg-indigo-500/10">
+                            <Server className="text-indigo-400" size={24} />
                         </div>
-                        {dbConfig.enabled ? (
-                            <Badge variant="green" className="flex items-center gap-1">
-                                <CheckCircle2 size={14} /> {t('connected')}
-                            </Badge>
-                        ) : (
-                            <Badge variant="gray" className="text-gray-400">{t('notLinked')}</Badge>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Host</label>
-                            <Input
-                                value={dbConfig.host}
-                                onChange={e => setDbConfig({ ...dbConfig, host: e.target.value })}
-                                placeholder="e.g., db.example.com"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Port</label>
-                            <Input
-                                value={dbConfig.port}
-                                onChange={e => setDbConfig({ ...dbConfig, port: e.target.value })}
-                                placeholder="3306"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Database Name</label>
-                            <Input
-                                value={dbConfig.database}
-                                onChange={e => setDbConfig({ ...dbConfig, database: e.target.value })}
-                                placeholder="velox_ai"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Username</label>
-                            <Input
-                                value={dbConfig.user}
-                                onChange={e => setDbConfig({ ...dbConfig, user: e.target.value })}
-                                placeholder="root"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs text-pterosub uppercase font-bold">Password</label>
-                            <Input
-                                type="password"
-                                value={dbConfig.password}
-                                onChange={e => setDbConfig({ ...dbConfig, password: e.target.value })}
-                                placeholder="********"
-                            />
+                        <div>
+                            <h3 className="text-lg font-bold text-pterotext">Server Environment</h3>
+                            <p className="text-sm text-pterosub">Configure the deployment environment mode.</p>
                         </div>
                     </div>
 
-                    {dbError && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-500 flex items-center gap-2">
-                            <AlertCircle size={14} /> {dbError}
+                    <div className="p-4 bg-pteroborder/20 rounded-lg flex items-center justify-between">
+                        <div>
+                            <p className="font-bold text-pterotext">Ubuntu Server Mode</p>
+                            <p className="text-xs text-pterosub mt-1">
+                                {serverMode === 'ubuntu'
+                                    ? "Enabled: System strictly uses Database. Local storage fallback is disabled."
+                                    : "Disabled: System allows local storage fallback for development."}
+                            </p>
                         </div>
-                    )}
-
-                    <div className="flex gap-2 pt-2">
-                        <Button onClick={handleTestDb} disabled={isTestingDb} variant="secondary">
-                            {isTestingDb ? 'Testing...' : t('testConnection')}
-                        </Button>
-                        <Button
-                            onClick={handleInitDb}
-                            disabled={isTestingDb || !dbConfig.host || !dbConfig.database}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                            <Save size={16} className="mr-2" /> {t('applyInit')}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={serverMode === 'ubuntu'}
+                                    onChange={(e) => toggleServerMode(e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
                     </div>
-
-                    <p className="text-[10px] text-pterosub italic">
-                        ⚠ {t('dbWarning')}
-                    </p>
                 </div>
             </Card>
 
-            {/* ERROR ZONE - Danger Zone */}
             <Card className="border-red-500/30 bg-red-500/5">
                 <div className="p-6 space-y-4">
                     <div className="flex items-center gap-3">
@@ -658,9 +383,9 @@ export default function AdminSystemPage() {
                 </div>
             </Card>
 
-            {/* Factory Reset Modal */}
-            <Modal isOpen={showResetModal} onClose={() => setShowResetModal(false)} title={t('factoryReset')}>
-                <div className="space-y-4">
+            {/* Factory Reset Sheet */}
+            <Sheet isOpen={showResetModal} onClose={() => setShowResetModal(false)} title={t('factoryReset')}>
+                <div className="space-y-6">
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3">
                         <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
                         <div>
@@ -686,12 +411,11 @@ export default function AdminSystemPage() {
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-3 pt-2">
-                        <Button variant="ghost" onClick={() => setShowResetModal(false)}>{t('cancel')}</Button>
+                    <div className="pt-6 border-t border-pteroborder flex flex-col gap-3">
                         <Button
                             onClick={handleFactoryReset}
                             disabled={!resetPassword || isResetting}
-                            className="bg-red-600 hover:bg-red-700 text-white"
+                            className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-bold uppercase tracking-wider"
                         >
                             {isResetting ? (
                                 <>
@@ -705,9 +429,10 @@ export default function AdminSystemPage() {
                                 </>
                             )}
                         </Button>
+                        <Button variant="ghost" className="w-full" onClick={() => setShowResetModal(false)}>{t('cancel')}</Button>
                     </div>
                 </div>
-            </Modal>
+            </Sheet>
         </div>
     );
 }

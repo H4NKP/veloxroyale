@@ -1,0 +1,34 @@
+{
+  "tickets": [
+    {
+      "id": 1,
+      "user_id": 2,
+      "subject": "hjbk",
+      "priority": "tier_4",
+      "status": "solved",
+      "created_at": "2025-12-29T17:10:18.180Z",
+      "updated_at": "2025-12-29T19:28:04.460Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1,
+      "ticket_id": 1,
+      "sender_type": "user",
+      "sender_id": 2,
+      "message": "hgjkl",
+      "created_at": "2025-12-29T17:10:18.180Z"
+    },
+    {
+      "id": 2,
+      "ticket_id": 1,
+      "sender_type": "admin",
+      "sender_id": 0,
+      "message": "jhkl",
+      "created_at": "2025-12-29T17:10:38.020Z"
+    }
+  ],
+  "settings": {
+    "max_open_tickets": 3
+  }
+}

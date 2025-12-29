@@ -24,6 +24,7 @@ export interface Server {
         userId: number;
         permissions: string[];
     }[];
+    validUntil?: string; // ISO Date "YYYY-MM-DD"
 }
 
 const initialServers: Server[] = [
@@ -49,7 +50,8 @@ const initialServers: Server[] = [
         whatsappApiToken: '',
         powerStatus: 'offline',
         created_at: '2024-03-01',
-        subUsers: []
+        subUsers: [],
+        validUntil: '2025-12-31'
     }
 ];
 
@@ -177,6 +179,11 @@ export async function createServer(serverData: Omit<Server, 'id' | 'created_at' 
         });
         newServer = await res.json();
     } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local creation disabled.");
+        }
+
         newServer = {
             ...serverData,
             id: serversDB.length > 0 ? Math.max(...serversDB.map(s => s.id)) + 1 : 1,
@@ -217,6 +224,11 @@ export async function updateServer(id: number, updates: Partial<Server>): Promis
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, ...updates })
         });
+    } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local update disabled.");
+        }
     }
 
     serversDB = loadServers();
@@ -243,9 +255,13 @@ export async function deleteServer(id: number): Promise<boolean> {
         }
     }
 
-    const remote = await isRemoteDb();
     if (remote) {
         await fetch(`/api/servers?id=${id}`, { method: 'DELETE' });
+    } else {
+        if (typeof window === 'undefined') {
+            const { isServerMode } = await import('@/lib/system-config');
+            if (isServerMode()) throw new Error("Ubuntu Server Mode enabled. Local delete disabled.");
+        }
     }
 
     serversDB = loadServers();

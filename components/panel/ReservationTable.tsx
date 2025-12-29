@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Input, Badge } from '@/components/ui/core';
-import { Search, Calendar, Users, Filter, MoreVertical, CheckCircle2, XCircle, Clock, Trash2, Download, Plus, FileText, RefreshCw } from 'lucide-react';
+import { Search, Calendar, Users, Filter, MoreVertical, CheckCircle2, XCircle, Clock, Trash2, Download, Plus, FileText, RefreshCw, User } from 'lucide-react';
 import { getReservationsByServerId, updateReservationStatus, deleteReservation, addReservation, updateReservation, type Reservation } from '@/lib/reservations';
 import { triggerSync } from '@/lib/sync';
+import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/components/ui/core';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
@@ -82,7 +83,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
     };
 
     const handleDelete = async (id: number) => {
-        if (confirm('Are you sure you want to delete this reservation?')) {
+        if (confirm(t('deleteConfirm'))) {
             await deleteReservation(id);
             await triggerSync();
             fetchReservations();
@@ -98,7 +99,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
             res.customerPhone.includes(searchTerm) ||
             res.id.toString().includes(searchTerm);
 
-        const matchesStatus = statusFilter === 'all' || res.status === statusFilter;
+        const matchesStatus = (statusFilter === 'all' ? res.status !== 'archived' : res.status === statusFilter);
         const matchesDate = !dateFilter || res.date === dateFilter;
 
         return matchesSearch && matchesStatus && matchesDate;
@@ -110,7 +111,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
 
     const handleCreate = async () => {
         if (!newRes.name || !newRes.phone || !newRes.date || !newRes.time || !newRes.pax) {
-            alert("All fields are required.");
+            alert(t('allFieldsRequired'));
             return;
         }
 
@@ -145,7 +146,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
         doc.setFontSize(10);
         doc.setTextColor(50, 50, 50); // Dark Gray
         doc.text(`${t('generatedOn')}: ${new Date().toLocaleString()}`, 14, 30);
-        doc.text(`${t('totalReservationsPDF')}: ${filteredReservations.length}`, 14, 35);
+        doc.text(`${t('totalReservationsPDF') || 'Total Reservations'}: ${filteredReservations.length}`, 14, 35);
 
         // Prepare Table Data
         const tableData = filteredReservations.map(res => [
@@ -160,7 +161,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
         // Generate Table
         autoTable(doc, {
             startY: 45,
-            head: [[t('customer'), 'Phone', 'Pax', `${t('date')} & ${t('time')}`, t('status'), t('notes')]],
+            head: [[t('customer'), t('phone'), t('pax'), `${t('date')} & ${t('time')}`, t('status'), t('notes')]],
             body: tableData,
 
             theme: 'plain', // Plain theme for B&W
@@ -196,152 +197,91 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
     };
 
     return (
-        <Card className="p-0 border-pteroborder bg-transparent">
-            {/* Search & Filter Bar */}
-            <div className="p-4 border-b border-pteroborder bg-pterocard/50 flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 text-pterosub" size={16} />
+        <Card className="p-0 border-pteroborder bg-[#0d1117] rounded-xl overflow-hidden shadow-2xl">
+            {/* Window Title Bar */}
+            <div className="px-4 py-3 border-b border-pteroborder bg-[#161b22] flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    {/* Title */}
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white/50 select-none">
+                        <Calendar size={14} />
+                        <span>reservations_module — {filteredReservations.length} records</span>
+                    </div>
+                </div>
+
+                {/* Search Bar - More Discreet */}
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-2.5 text-pterosub" size={12} />
                     <Input
                         placeholder={t('searchPlaceholder')}
-                        className="pl-10 h-10"
+                        className="pl-8 h-8 bg-[#0d1117] border-pteroborder/50 text-xs text-pterotext focus:bg-pterodark focus:border-pteroblue transition-all rounded-md"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex gap-2 relative">
+            </div>
+
+            {/* Application Toolbar (Finder Style) - Refined */}
+            <div className="bg-[#0d1117] border-b border-pteroborder p-4 flex flex-col md:flex-row gap-6 items-center justify-between backdrop-blur-sm bg-opacity-95">
+
+                {/* Status Segmented Control - Smooth Pill Design */}
+                <div className="flex items-center gap-1 p-1.5 bg-[#161b22] rounded-xl border border-white/5 shadow-inner overflow-x-auto max-w-full">
+                    {[
+                        { id: 'all', label: t('allStatuses') },
+                        { id: 'confirmed', label: 'Confirmed' },
+                        { id: 'pending', label: 'Pending' },
+                        { id: 'cancelled', label: 'Cancelled' }
+                    ].map(status => (
+                        <button
+                            key={status.id}
+                            onClick={() => setStatusFilter(status.id as any)}
+                            className={cn(
+                                "px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-300 ease-out whitespace-nowrap",
+                                statusFilter === status.id
+                                    ? "bg-pteroblue text-white shadow-lg shadow-blue-500/20 scale-105"
+                                    : "text-pterosub hover:text-pterotext hover:bg-white/5"
+                            )}
+                        >
+                            {status.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Primary Actions - Floating Group */}
+                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
+                    {/* Date Picker (Mini) */}
+                    <div className="relative group">
+                        <input
+                            type="date"
+                            className="bg-[#161b22] border border-white/5 hover:border-pteroblue/30 text-xs text-pterotext rounded-lg px-3 py-2 h-9 outline-none transition-all w-36 shadow-sm focus:ring-2 focus:ring-pteroblue/20"
+                            value={dateFilter}
+                            onChange={e => setDateFilter(e.target.value)}
+                        />
+                        {dateFilter && (
+                            <button
+                                onClick={() => setDateFilter('')}
+                                className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 text-white shadow-md hover:scale-110 transition-transform z-10"
+                            >
+                                <XCircle size={10} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="h-6 w-px bg-white/5 mx-2" />
+
                     <Button
                         variant="secondary"
-                        className={cn(
-                            "h-10 px-4 border-pteroborder hover:bg-pteroborder transition-all group flex items-center gap-2",
-                            (dateFilter || statusFilter !== 'all') ? "border-pteroblue bg-pteroblue/5 text-pteroblue" : ""
-                        )}
-                        onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                        onClick={handleDownloadPDF}
+                        className="h-9 px-4 text-[11px] bg-[#161b22] border border-white/5 hover:bg-white/5 hover:border-white/10 transition-all font-bold uppercase tracking-wide gap-2 text-pterosub hover:text-pterotext rounded-lg shadow-sm"
                     >
-                        <MoreVertical size={18} className={cn("transition-transform duration-300", isActionsMenuOpen ? "rotate-90" : "")} />
-                        <span className="text-xs font-bold uppercase tracking-wider">{t('actions')}</span>
-                        {(dateFilter || statusFilter !== 'all') && (
-                            <span className="w-2 h-2 bg-pteroblue rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                        )}
+                        <FileText size={14} /> <span className="hidden sm:inline">{t('downloadReport')}</span>
                     </Button>
 
-                    <AnimatePresence>
-                        {isActionsMenuOpen && (
-                            <>
-                                {/* Backdrop */}
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
-                                    onClick={() => setIsActionsMenuOpen(false)}
-                                />
-
-                                {/* Dropdown Card */}
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    transition={{ duration: 0.15, ease: "easeOut" }}
-                                    className="absolute right-0 top-12 w-72 z-50 bg-pterodark border border-pteroborder rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col"
-                                >
-                                    {/* Header Section */}
-                                    <div className="p-4 border-b border-pteroborder bg-pterocard/30">
-                                        <h4 className="text-[10px] font-black text-pterosub uppercase tracking-[0.2em]">{t('managementTools')}</h4>
-                                    </div>
-
-                                    {/* Scrollable Content Area */}
-                                    <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
-                                        <div className="p-4 space-y-5">
-                                            {/* Primary Actions */}
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <button
-                                                    onClick={() => { setIsCreateOpen(true); setIsActionsMenuOpen(false); }}
-                                                    className="flex items-center gap-3 w-full p-3 rounded-lg bg-pteroblue hover:bg-blue-600 text-white transition-all group/btn"
-                                                >
-                                                    <div className="p-1.5 bg-white/10 rounded-md group-hover/btn:scale-110 transition-transform">
-                                                        <Plus size={16} />
-                                                    </div>
-                                                    <span className="text-sm font-bold">{t('newReservation')}</span>
-                                                </button>
-
-                                                <button
-                                                    onClick={() => { handleDownloadPDF(); setIsActionsMenuOpen(false); }}
-                                                    className="flex items-center gap-3 w-full p-3 rounded-lg bg-pterocard border border-pteroborder hover:border-pterosub/50 text-pterotext transition-all group/btn"
-                                                >
-                                                    <div className="p-1.5 bg-pteroblue/10 text-pteroblue rounded-md group-hover/btn:scale-110 transition-transform">
-                                                        <FileText size={16} />
-                                                    </div>
-                                                    <span className="text-sm font-bold">{t('downloadReport')}</span>
-                                                </button>
-                                            </div>
-
-                                            {/* Filters Section */}
-                                            <div className="space-y-4 pt-2">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <Filter size={12} className="text-pteroblue" />
-                                                    <span className="text-[10px] font-black text-pterosub uppercase tracking-widest">{t('searchFilters')}</span>
-                                                </div>
-
-                                                <div className="space-y-3">
-                                                    <div className="space-y-1.5">
-                                                        <label className="text-[11px] font-bold text-pterosub block ml-1">{t('specificDate')}</label>
-                                                        <div className="relative">
-                                                            <input
-                                                                type="date"
-                                                                className="w-full bg-pterocard border border-pteroborder text-sm text-pterotext rounded-lg px-3 py-2 outline-none focus:border-pteroblue transition-all h-10"
-                                                                value={dateFilter}
-                                                                onChange={e => setDateFilter(e.target.value)}
-                                                            />
-                                                            {dateFilter && (
-                                                                <button
-                                                                    onClick={() => setDateFilter('')}
-                                                                    className="absolute right-3 top-2.5 text-pterosub hover:text-red-400 transition-colors"
-                                                                >
-                                                                    <XCircle size={15} />
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="space-y-1.5">
-                                                        <label className="text-[11px] font-bold text-pterosub block ml-1">{t('reservationStatus')}</label>
-                                                        <select
-                                                            className="w-full bg-pterocard border border-pteroborder text-sm text-pterotext rounded-lg px-3 h-10 outline-none focus:border-pteroblue transition-all"
-                                                            value={statusFilter}
-                                                            onChange={e => setStatusFilter(e.target.value as any)}
-                                                        >
-                                                            <option value="all">All Statuses</option>
-                                                            <option value="confirmed">Confirmed Only</option>
-                                                            <option value="pending">Pending Review</option>
-                                                            <option value="cancelled">Cancelled</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Footer Actions */}
-                                        <div className="p-3 bg-pterocard/50 border-t border-pteroborder flex flex-col gap-2">
-                                            {(dateFilter || statusFilter !== 'all') && (
-                                                <button
-                                                    onClick={() => { setDateFilter(''); setStatusFilter('all'); }}
-                                                    className="w-full py-2 text-[10px] font-black text-red-400 hover:text-red-300 uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                                                >
-                                                    <XCircle size={12} /> {t('resetView')}
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => { fetchReservations(); setIsActionsMenuOpen(false); }}
-                                                className="w-full py-2 bg-pteroborder/30 hover:bg-pteroborder/50 rounded-md text-[10px] font-black text-pterosub hover:text-pterotext transition-all flex items-center justify-center gap-2 uppercase tracking-tighter"
-                                            >
-                                                <RefreshCw size={12} /> {t('reloadRecords')}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            </>
-                        )}
-                    </AnimatePresence>
+                    <Button
+                        onClick={() => setIsCreateOpen(true)}
+                        className="h-9 px-5 text-[11px] bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25 font-bold uppercase tracking-wide gap-2 rounded-lg transition-all hover:brightness-110 active:brightness-90"
+                    >
+                        <Plus size={14} strokeWidth={3} /> {t('newReservation')}
+                    </Button>
                 </div>
             </div>
 
@@ -369,7 +309,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                 {/* Core Info Grid (Editable) */}
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">Main Reservation Data</h5>
+                                        <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">{t('mainReservationData')}</h5>
                                         {JSON.stringify(tempCoreData) !== JSON.stringify({
                                             customerName: selectedReservation.customerName,
                                             partySize: selectedReservation.partySize,
@@ -387,7 +327,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                                     disabled={isSavingCore}
                                                     className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
                                                 >
-                                                    {isSavingCore ? 'Saving...' : 'Save & Notify'}
+                                                    {isSavingCore ? t('saving') : t('saveNotify')}
                                                 </button>
                                             )}
                                     </div>
@@ -436,14 +376,14 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-2">
                                         <div className="h-px flex-1 bg-pteroborder/50" />
-                                        <h4 className="text-[10px] font-black text-pteroblue uppercase tracking-[0.2em]">Additional Commentaries</h4>
+                                        <h4 className="text-[10px] font-black text-pteroblue uppercase tracking-[0.2em]">{t('additionalCommentaries')}</h4>
                                         <div className="h-px flex-1 bg-pteroborder/50" />
                                     </div>
 
                                     {/* Structured Data */}
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center">
-                                            <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">AI Categorized Data</h5>
+                                            <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">{t('aiCategorizedData')}</h5>
                                             {JSON.stringify(tempStructured) !== JSON.stringify(typeof selectedReservation.structured_commentary === 'string' ? JSON.parse(selectedReservation.structured_commentary) : (selectedReservation.structured_commentary || {})) && (
                                                 <button
                                                     onClick={async () => {
@@ -456,7 +396,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                                     disabled={isSavingStructured}
                                                     className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
                                                 >
-                                                    {isSavingStructured ? 'Saving...' : 'Save AI Data'}
+                                                    {isSavingStructured ? t('saving') : t('saveAiData')}
                                                 </button>
                                             )}
                                         </div>
@@ -502,7 +442,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                         <div className="flex justify-between items-center">
                                             <label className="text-[10px] font-black text-pterosub uppercase tracking-widest flex items-center gap-2">
                                                 <RefreshCw size={12} className="text-yellow-400" />
-                                                Staff Notes (Priority)
+                                                {t('staffNotesPriority')}
                                             </label>
                                             {tempStaffNotes !== (selectedReservation.staff_notes || '') && (
                                                 <button
@@ -516,13 +456,13 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                                     disabled={isSavingNotes}
                                                     className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
                                                 >
-                                                    {isSavingNotes ? 'Saving...' : 'Save Changes'}
+                                                    {isSavingNotes ? t('saving') : t('saveChanges')}
                                                 </button>
                                             )}
                                         </div>
                                         <textarea
                                             className="w-full h-24 bg-pterodark border border-pteroborder rounded-xl p-3 text-sm text-pterotext focus:border-pteroblue outline-none transition-all resize-none"
-                                            placeholder="Enter manual notes here... (AI data will be kept but manual notes take priority on panel views)"
+                                            placeholder={t('enterManualNotes')}
                                             value={tempStaffNotes}
                                             onChange={(e) => setTempStaffNotes(e.target.value)}
                                         />
@@ -534,7 +474,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                             <details className="group">
                                                 <summary className="list-none cursor-pointer flex items-center gap-2 text-[10px] font-black text-pterosub uppercase tracking-widest hover:text-pterotext transition-colors">
                                                     <MoreVertical size={12} className="group-open:rotate-90 transition-transform" />
-                                                    Original WhatsApp Conversation
+                                                    {t('originalWhatsappConversation')}
                                                 </summary>
                                                 <div className="mt-3 p-4 bg-pterocard/50 border border-pteroborder/50 rounded-xl text-xs text-pterosub font-mono whitespace-pre-wrap leading-relaxed">
                                                     {selectedReservation.raw_commentary}
@@ -558,7 +498,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                             className="bg-green-600 hover:bg-green-700 text-white"
                                             onClick={() => { handleStatusChange(selectedReservation.id, 'confirmed'); setIsDetailOpen(false); }}
                                         >
-                                            Confirm Booking
+                                            {t('confirmBooking')}
                                         </Button>
                                     )}
                                     {selectedReservation.status !== 'cancelled' && (
@@ -578,63 +518,133 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
             </AnimatePresence>
 
             {/* Create Modal Overlay */}
-            {isCreateOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <Card className="w-full max-w-md bg-pterodark border-pteroborder shadow-2xl">
-                        <div className="p-4 border-b border-pteroborder flex justify-between items-center">
-                            <h3 className="font-semibold text-pterotext">{t('newReservation')}</h3>
-                            <button onClick={() => setIsCreateOpen(false)} className="text-pterosub hover:text-white"><XCircle size={20} /></button>
+            {/* Create Sheet Overlay */}
+            <Sheet
+                isOpen={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                title={t('newReservation')}
+            >
+                <div className="space-y-6">
+                    <p className="text-sm text-pterosub mb-6">
+                        Create a new manual reservation. This will trigger a sync across all connected clients.
+                    </p>
+
+                    {/* Customer Details */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <User size={14} className="text-pteroblue" />
+                            <h3 className="text-xs font-bold text-pterotext uppercase tracking-widest">{t('customer')}</h3>
                         </div>
-                        <div className="p-4 space-y-4">
+
+                        <div className="grid grid-cols-1 gap-4">
                             <div>
-                                <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('customer')} <span className="text-red-400">*</span></label>
-                                <Input value={newRes.name} onChange={e => setNewRes({ ...newRes, name: e.target.value })} placeholder="John Doe" required />
+                                <label className="text-[10px] font-bold text-pterosub uppercase block mb-1.5 ml-1">{t('customerName')} <span className="text-red-400">*</span></label>
+                                <Input
+                                    value={newRes.name}
+                                    onChange={e => setNewRes({ ...newRes, name: e.target.value })}
+                                    placeholder="Full Name"
+                                    className="bg-pterocard/50 border-pteroborder/50 focus:border-pteroblue/50"
+                                    required
+                                />
                             </div>
                             <div>
-                                <label className="text-xs text-pterosub uppercase font-bold block mb-1">Phone <span className="text-red-400">*</span></label>
-                                <Input value={newRes.phone} onChange={e => setNewRes({ ...newRes, phone: e.target.value })} placeholder="+1 234..." required />
+                                <label className="text-[10px] font-bold text-pterosub uppercase block mb-1.5 ml-1">{t('phone')} <span className="text-red-400">*</span></label>
+                                <Input
+                                    value={newRes.phone}
+                                    onChange={e => setNewRes({ ...newRes, phone: e.target.value })}
+                                    placeholder="+1 (555) 000-0000"
+                                    className="bg-pterocard/50 border-pteroborder/50 focus:border-pteroblue/50"
+                                    required
+                                />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('date')} <span className="text-red-400">*</span></label>
-                                    <input type="date" className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext"
-                                        value={newRes.date} onChange={e => setNewRes({ ...newRes, date: e.target.value })} required />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('time')} <span className="text-red-400">*</span></label>
-                                    <input type="time" className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext"
-                                        value={newRes.time} onChange={e => setNewRes({ ...newRes, time: e.target.value })} required />
-                                </div>
+                        </div>
+                    </div>
+
+                    {/* Reservation Details */}
+                    <div className="space-y-4 pt-4 border-t border-pteroborder/50">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Calendar size={14} className="text-pteroblue" />
+                            <h3 className="text-xs font-bold text-pterotext uppercase tracking-widest">{t('reservationDetails')}</h3>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-pterosub uppercase block mb-1.5 ml-1">{t('date')} <span className="text-red-400">*</span></label>
+                                <input
+                                    type="date"
+                                    className="w-full bg-pterocard/50 border border-pteroborder/50 focus:border-pteroblue/50 rounded-lg px-3 py-2 text-sm text-pterotext outline-none transition-all h-10"
+                                    value={newRes.date}
+                                    onChange={e => setNewRes({ ...newRes, date: e.target.value })}
+                                    required
+                                />
                             </div>
                             <div>
-                                <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('people')} <span className="text-red-400">*</span></label>
-                                <input type="number" className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext"
-                                    value={newRes.pax} onChange={e => setNewRes({ ...newRes, pax: parseInt(e.target.value) })} min={1} required />
-                            </div>
-                            <div>
-                                <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('notes')}</label>
-                                <textarea
-                                    className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext h-24 resize-none outline-none focus:border-pteroblue transition-all"
-                                    value={newRes.notes}
-                                    onChange={e => setNewRes({ ...newRes, notes: e.target.value })}
-                                    placeholder="Enter additional info or special requests..."
+                                <label className="text-[10px] font-bold text-pterosub uppercase block mb-1.5 ml-1">{t('time')} <span className="text-red-400">*</span></label>
+                                <input
+                                    type="time"
+                                    className="w-full bg-pterocard/50 border border-pteroborder/50 focus:border-pteroblue/50 rounded-lg px-3 py-2 text-sm text-pterotext outline-none transition-all h-10"
+                                    value={newRes.time}
+                                    onChange={e => setNewRes({ ...newRes, time: e.target.value })}
+                                    required
                                 />
                             </div>
                         </div>
 
-                        <div className="p-4 border-t border-pteroborder flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>{t('cancel')}</Button>
-                            <Button onClick={handleCreate}>{t('confirm')}</Button>
+                        <div>
+                            <label className="text-[10px] font-bold text-pterosub uppercase block mb-1.5 ml-1">{t('people')} <span className="text-red-400">*</span></label>
+                            <div className="relative">
+                                <Users size={16} className="absolute left-3 top-2.5 text-pterosub" />
+                                <input
+                                    type="number"
+                                    className="w-full bg-pterocard/50 border border-pteroborder/50 focus:border-pteroblue/50 rounded-lg pl-10 pr-3 py-2 text-sm text-pterotext outline-none transition-all h-10"
+                                    value={newRes.pax}
+                                    onChange={e => setNewRes({ ...newRes, pax: parseInt(e.target.value) })}
+                                    min={1}
+                                    required
+                                />
+                            </div>
                         </div>
-                    </Card>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-4 pt-4 border-t border-pteroborder/50">
+                        <div className="flex items-center gap-2 mb-2">
+                            <FileText size={14} className="text-pteroblue" />
+                            <h3 className="text-xs font-bold text-pterotext uppercase tracking-widest">{t('notes')}</h3>
+                        </div>
+
+                        <textarea
+                            className="w-full bg-pterocard/50 border border-pteroborder/50 focus:border-pteroblue/50 rounded-xl px-4 py-3 text-sm text-pterotext h-32 resize-none outline-none transition-all"
+                            value={newRes.notes}
+                            onChange={e => setNewRes({ ...newRes, notes: e.target.value })}
+                            placeholder={t('noAdditionalInfo')}
+                        />
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="pt-6 border-t border-pteroborder flex justify-between items-center gap-4">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setIsCreateOpen(false)}
+                            className="flex-1 bg-transparent border border-pteroborder hover:bg-white/5"
+                        >
+                            {t('cancel')}
+                        </Button>
+                        <Button
+                            onClick={handleCreate}
+                            className="flex-[2] bg-pteroblue hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20 font-bold"
+                        >
+                            {t('confirm')}
+                        </Button>
+                    </div>
                 </div>
-            )}
+            </Sheet>
 
             {/* Reservations Table */}
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="border-b border-pteroborder bg-pterodark/30">
+                        <tr className="border-b border-pteroborder bg-[#161b22]">
                             <th className="p-4 text-[10px] font-bold text-pterosub uppercase tracking-widest">{t('customer')}</th>
                             <th className="p-4 text-[10px] font-bold text-pterosub uppercase tracking-widest text-center">{t('people')}</th>
                             <th className="p-4 text-[10px] font-bold text-pterosub uppercase tracking-widest">{t('date')} & {t('time')}</th>
@@ -649,7 +659,7 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                 <td colSpan={6} className="p-12 text-center text-pterosub">
                                     <div className="flex items-center justify-center gap-3">
                                         <div className="w-4 h-4 border-2 border-pteroblue/30 border-t-pteroblue rounded-full animate-spin" />
-                                        Syncing bookings...
+                                        {t('syncingBookings')}
                                     </div>
                                 </td>
                             </tr>
