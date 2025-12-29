@@ -21,7 +21,10 @@ import {
     Edit2,
     ShieldCheck,
     Database,
-    Trash2
+    Trash2,
+    Mail,
+    Image,
+    Layout
 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { getLicenseInfo } from '@/lib/license';
@@ -62,6 +65,8 @@ export default function AdminSystemPage() {
     const [dbStatus, setDbStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [dbError, setDbError] = useState('');
 
+    const [smtpError, setSmtpError] = useState('');
+
     // Factory Reset State
     const [showResetModal, setShowResetModal] = useState(false);
     const [resetPassword, setResetPassword] = useState('');
@@ -82,16 +87,29 @@ export default function AdminSystemPage() {
         setRepoBranch(savedBranch);
 
         // Calculamos las estadísticas del sistema
-        const updateStats = () => {
+        const updateStats = async () => {
             try {
                 const servers = JSON.parse(localStorage.getItem('veloxai_servers') || '[]');
                 const reservations = JSON.parse(localStorage.getItem('veloxai_reservations') || '[]');
+                const lastBackup = localStorage.getItem('veloxai_last_backup') || 'Never';
+
+                // Fetch real uptime from server
+                let realUptime = '0h 0m';
+                try {
+                    const res = await fetch('/api/system/uptime');
+                    const data = await res.json();
+                    if (data.uptimeFormatted) {
+                        realUptime = data.uptimeFormatted;
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch uptime", err);
+                }
 
                 setSystemStats({
-                    uptime: calculateUptime(),
+                    uptime: realUptime,
                     activeServers: servers.filter((s: any) => s.status === 'active').length,
                     totalReservations: reservations.length,
-                    lastBackup: localStorage.getItem('veloxai_last_backup') || 'Never'
+                    lastBackup
                 });
             } catch (e) {
                 console.error('Failed to load stats', e);
@@ -115,19 +133,7 @@ export default function AdminSystemPage() {
         return () => clearInterval(interval);
     }, []);
 
-    const calculateUptime = () => {
-        const start = localStorage.getItem('veloxai_start_time');
-        if (!start) {
-            const now = Date.now();
-            localStorage.setItem('veloxai_start_time', now.toString());
-            return '0h 0m';
-        }
 
-        const elapsed = Date.now() - parseInt(start);
-        const hours = Math.floor(elapsed / (1000 * 60 * 60));
-        const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-        return `${hours}h ${minutes}m`;
-    };
 
     const handleSaveRepoConfig = () => {
         setIsSavingRepo(true);
@@ -348,6 +354,7 @@ export default function AdminSystemPage() {
         }
     };
 
+
     return (
         <div className="space-y-6">
             <header>
@@ -467,9 +474,6 @@ export default function AdminSystemPage() {
                         </Button>
                     </div>
 
-                    {!hasUpdates && updateStatus !== 'checking' && (
-                        <p className="text-xs text-pterosub italic">Run "Check for Updates" to enable the update button</p>
-                    )}
                 </div>
             </Card>
 

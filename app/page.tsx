@@ -16,6 +16,12 @@ export default function LoginPage() {
     password: ''
   });
 
+  // Recovery State
+  const [showRecover, setShowRecover] = useState(false);
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverStatus, setRecoverStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [recoverMsg, setRecoverMsg] = useState('');
+
   // Block back/forward navigation on login page
   useEffect(() => {
     // Push initial state
@@ -65,6 +71,32 @@ export default function LoginPage() {
     } else {
       setError('Invalid credentials or account suspended');
       setIsLoading(false);
+    }
+  };
+
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoverStatus('sending');
+    setRecoverMsg('');
+
+    try {
+      const res = await fetch('/api/auth/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoverEmail })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setRecoverStatus('sent');
+        setRecoverMsg('If an account matches that email, a recovery link has been sent.');
+      } else {
+        setRecoverStatus('error');
+        setRecoverMsg(data.message || 'Failed to send recovery email');
+      }
+    } catch (err: any) {
+      setRecoverStatus('error');
+      setRecoverMsg('Network error occurred');
     }
   };
 
@@ -120,6 +152,16 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRecover(true)}
+                className="text-xs text-pteroblue hover:text-pteroblue/80 hover:underline transition-colors"
+              >
+                Forgot Password?
+              </button>
+            </div>
+
             <Button
               type="submit"
               className="w-full h-11"
@@ -134,6 +176,65 @@ export default function LoginPage() {
           &copy; 2025 VeloxAI System. All rights reserved.
         </p>
       </div>
+
+      {/* Recover Modal */}
+      {showRecover && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <Card className="w-full max-w-sm bg-[#1a202c] border-pteroblue/20 shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-pterotext mb-2">Recover Password</h3>
+            <p className="text-sm text-pterosub mb-4">Enter your email address to receive a recovery link.</p>
+
+            {recoverStatus === 'sent' ? (
+              <div className="text-center py-4">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-500/10 mb-3">
+                  <Mail className="text-green-500" size={24} />
+                </div>
+                <p className="text-green-400 text-sm font-medium">{recoverMsg}</p>
+                <Button
+                  onClick={() => { setShowRecover(false); setRecoverStatus('idle'); }}
+                  className="w-full mt-4"
+                  variant="secondary"
+                >
+                  Back to Login
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleRecover} className="space-y-4">
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={recoverEmail}
+                    onChange={e => setRecoverEmail(e.target.value)}
+                    required
+                    className="bg-pterodark/50"
+                  />
+                </div>
+                {recoverStatus === 'error' && (
+                  <p className="text-xs text-red-400">{recoverMsg}</p>
+                )}
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowRecover(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={recoverStatus === 'sending'}
+                    className="flex-1 bg-pteroblue hover:bg-pteroblue/90 text-white"
+                  >
+                    {recoverStatus === 'sending' ? <Loader2 className="animate-spin" size={16} /> : 'Send Link'}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

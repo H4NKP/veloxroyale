@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
+    // process.uptime() returns seconds
+    const uptimeSeconds = process.uptime();
+
+    // Format to Human Readable
+    const hours = Math.floor(uptimeSeconds / 3600);
+    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+    const seconds = Math.floor(uptimeSeconds % 60);
+
     return NextResponse.json({
-        uptime: process.uptime(),
-        bootTime: Date.now() - (process.uptime() * 1000)
+        uptimeSeconds,
+        uptimeFormatted: `${hours}h ${minutes}m ${seconds}s`
     });
 }

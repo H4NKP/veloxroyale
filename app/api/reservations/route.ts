@@ -50,19 +50,24 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const {
             userId, serverId, customerName, customerPhone,
-            date, time, partySize, status, source, notes, allergies
+            date, time, partySize, status, source, notes, allergies,
+            raw_commentary, structured_commentary, staff_notes
         } = body;
 
         const sql = `
             INSERT INTO reservations (
                 userId, serverId, customerName, customerPhone, 
-                date, time, partySize, status, source, created_at, notes, allergies
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                date, time, partySize, status, source, created_at, notes, allergies,
+                raw_commentary, structured_commentary, staff_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const params = [
             userId, serverId, customerName, customerPhone,
             date, time, partySize, status || 'pending', source,
-            new Date().toISOString(), notes || '', allergies || ''
+            new Date().toISOString(), notes || '', allergies || '',
+            raw_commentary || '',
+            typeof structured_commentary === 'object' ? JSON.stringify(structured_commentary) : (structured_commentary || '{}'),
+            staff_notes || ''
         ];
 
         const result: any = await query(sql, params);
@@ -72,6 +77,8 @@ export async function POST(req: NextRequest) {
     }
 }
 
+import { sendWhatsAppMessage } from '@/lib/whatsapp';
+
 export async function PUT(req: NextRequest) {
     try {
         const body = await req.json();
@@ -79,6 +86,12 @@ export async function PUT(req: NextRequest) {
 
         if (!userId && !adminAccess) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Fetch current reservation data to check for core changes and get server info
+        const [currentRes]: any = await query('SELECT * FROM reservations WHERE id = ?', [id]);
+        if (!currentRes) {
+            return NextResponse.json({ error: 'Reservation not found' }, { status: 404 });
         }
 
         const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
@@ -91,7 +104,6 @@ export async function PUT(req: NextRequest) {
             sql = `UPDATE reservations SET ${fields} WHERE id = ?`;
             params = [...values, id];
         } else {
-            // Security: Normal users can only update their own reservations
             sql = `UPDATE reservations SET ${fields} WHERE id = ? AND userId = ?`;
             params = [...values, id, userId];
         }
@@ -100,6 +112,34 @@ export async function PUT(req: NextRequest) {
 
         if (result.affectedRows === 0) {
             return NextResponse.json({ error: 'Reservation not found or access denied' }, { status: 403 });
+        }
+
+        // Check if core fields were modified
+        const coreFields = ['customerName', 'partySize', 'date', 'time'];
+        const isCoreChanged = coreFields.some(field =>
+            updates[field] !== undefined && String(updates[field]) !== String(currentRes[field])
+        );
+
+        if (isCoreChanged && currentRes.customerPhone && currentRes.source === 'WhatsApp') {
+            try {
+                // Fetch server details for WhatsApp API
+                const [server]: any = await query('SELECT * FROM servers WHERE id = ?', [currentRes.serverId]);
+                if (server && server.whatsappApiToken && server.whatsappPhoneNumberId) {
+                    const lang = server.config?.aiLanguage || 'es';
+                    const name = updates.customerName || currentRes.customerName;
+                    const pax = updates.partySize || currentRes.partySize;
+                    const date = updates.date || currentRes.date;
+                    const time = updates.time || currentRes.time;
+
+                    const msgEn = `Hello ${name}! Your reservation has been updated:\n- Guests: ${pax}\n- Date: ${date}\n- Time: ${time}\nSee you soon!`;
+                    const msgEs = `¡Hola ${name}! Tu reserva ha sido actualizada:\n- Personas: ${pax}\n- Fecha: ${date}\n- Hora: ${time}\n¡Te esperamos!`;
+
+                    const finalMsg = lang === 'en' ? msgEn : msgEs;
+                    await sendWhatsAppMessage(server.whatsappApiToken, server.whatsappPhoneNumberId, currentRes.customerPhone, finalMsg);
+                }
+            } catch (err) {
+                console.error("[Notification Error]", err);
+            }
         }
 
         return NextResponse.json({ success: true });

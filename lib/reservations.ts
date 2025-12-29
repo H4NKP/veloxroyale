@@ -12,6 +12,11 @@ export interface Reservation {
     status: 'confirmed' | 'pending' | 'cancelled';
     source: 'WhatsApp' | 'Web' | 'Phone';
     createdAt: string;
+    notes?: string;
+    allergies?: string;
+    raw_commentary?: string;
+    structured_commentary?: any;
+    staff_notes?: string;
 }
 
 const initialReservations: Reservation[] = [
@@ -108,6 +113,15 @@ let reservationsDB = loadReservations();
 
 // Helper to check if remote DB is enabled
 async function isRemoteDb(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+        try {
+            const { getDbConfig } = await import('./db');
+            const config = getDbConfig();
+            return config?.enabled === true;
+        } catch {
+            return false;
+        }
+    }
     try {
         const res = await fetch('/api/db/config');
         const data = await res.json();
@@ -118,7 +132,22 @@ async function isRemoteDb(): Promise<boolean> {
 }
 
 export async function getReservationsByUserId(userId: number): Promise<Reservation[]> {
-    if (typeof window === 'undefined') return [];
+    if (typeof window === 'undefined') {
+        if (await isRemoteDb()) {
+            try {
+                const { query } = await import('./db');
+                const results: any = await query('SELECT * FROM reservations WHERE userId = ?', [userId]);
+                return results.map((r: any) => ({
+                    ...r,
+                    structured_commentary: typeof r.structured_commentary === 'string' ? JSON.parse(r.structured_commentary) : r.structured_commentary
+                }));
+            } catch (e) {
+                console.error("[getReservationsByUserId] Server SQL Error:", e);
+                return [];
+            }
+        }
+        return initialReservations.filter(r => r.userId === userId);
+    }
 
     if (await isRemoteDb()) {
         const res = await fetch(`/api/reservations?userId=${userId}`);
@@ -130,8 +159,30 @@ export async function getReservationsByUserId(userId: number): Promise<Reservati
     return reservationsDB.filter(r => r.userId === userId);
 }
 
+
 export async function getReservationsByServerId(serverId: number, userId?: number): Promise<Reservation[]> {
-    if (typeof window === 'undefined') return [];
+    if (typeof window === 'undefined') {
+        if (await isRemoteDb()) {
+            try {
+                const { query } = await import('./db');
+                let sql = 'SELECT * FROM reservations WHERE serverId = ?';
+                let params = [serverId];
+                if (userId) {
+                    sql += ' AND userId = ?';
+                    params.push(userId);
+                }
+                const results: any = await query(sql, params);
+                return results.map((r: any) => ({
+                    ...r,
+                    structured_commentary: typeof r.structured_commentary === 'string' ? JSON.parse(r.structured_commentary) : r.structured_commentary
+                }));
+            } catch (e) {
+                console.error("[getReservationsByServerId] Server SQL Error:", e);
+                return [];
+            }
+        }
+        return initialReservations.filter(r => r.serverId === serverId);
+    }
 
     if (await isRemoteDb()) {
         const url = userId
@@ -146,13 +197,37 @@ export async function getReservationsByServerId(serverId: number, userId?: numbe
     return reservationsDB.filter(r => r.serverId === serverId);
 }
 
+
 export async function updateReservationStatus(id: number, status: Reservation['status']): Promise<Reservation | null> {
+    return updateReservation(id, { status });
+}
+
+export async function updateReservation(id: number, updates: Partial<Reservation>): Promise<Reservation | null> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+                const values = Object.values(updates).map(v =>
+                    typeof v === 'object' ? JSON.stringify(v) : v
+                );
+                await query(`UPDATE reservations SET ${fields} WHERE id = ?`, [...values, id]);
+                // Simplified: We don't return the full object here to save complexity, 
+                // but in a real app we'd fetch it again if needed.
+                return { id, ...updates } as any;
+            } catch (e) {
+                console.error("[updateReservation] Server SQL Error:", e);
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     if (remote) {
         await fetch('/api/reservations', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, status })
+            body: JSON.stringify({ id, adminAccess: true, ...updates })
         });
     }
 
@@ -160,12 +235,26 @@ export async function updateReservationStatus(id: number, status: Reservation['s
     const index = reservationsDB.findIndex(r => r.id === id);
     if (index === -1) return null;
 
-    reservationsDB[index] = { ...reservationsDB[index], status };
+    reservationsDB[index] = { ...reservationsDB[index], ...updates };
     saveReservations(reservationsDB);
     return reservationsDB[index];
 }
 
 export async function deleteReservation(id: number): Promise<boolean> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                await query('DELETE FROM reservations WHERE id = ?', [id]);
+                return true;
+            } catch (e) {
+                console.error("[deleteReservation] Server SQL Error:", e);
+                return false;
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     if (remote) {
         await fetch(`/api/reservations?id=${id}`, { method: 'DELETE' });
@@ -181,6 +270,25 @@ export async function deleteReservation(id: number): Promise<boolean> {
 }
 
 export async function addReservation(res: Omit<Reservation, 'id' | 'createdAt'>): Promise<Reservation> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                const keys = Object.keys(res);
+                const placeholders = keys.map(() => '?').join(', ');
+                const values = Object.values(res).map(v =>
+                    typeof v === 'object' ? JSON.stringify(v) : v
+                );
+                const sql = `INSERT INTO reservations (${keys.join(', ')}, created_at) VALUES (${placeholders}, ?)`;
+                const result: any = await query(sql, [...values, new Date().toISOString()]);
+                return { id: result.insertId, createdAt: new Date().toISOString(), ...res } as Reservation;
+            } catch (e) {
+                console.error("[addReservation] Server SQL Error:", e);
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     let newRes: Reservation;
 
@@ -203,6 +311,16 @@ export async function addReservation(res: Omit<Reservation, 'id' | 'createdAt'>)
     reservationsDB.push(newRes);
     saveReservations(reservationsDB);
     return newRes;
+}
+
+
+export async function findPendingReservationByPhone(serverId: number, phone: string): Promise<Reservation | null> {
+    const reservations = await getReservationsByServerId(serverId);
+    // Find latest pending reservation for this phone in the last 24 hours (to avoid matching very old ones)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return reservations
+        .filter(r => r.customerPhone === phone && r.status === 'pending' && r.createdAt >= oneDayAgo)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
 }
 
 /**

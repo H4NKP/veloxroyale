@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Input, Badge } from '@/components/ui/core';
 import { Search, Calendar, Users, Filter, MoreVertical, CheckCircle2, XCircle, Clock, Trash2, Download, Plus, FileText, RefreshCw } from 'lucide-react';
-import { getReservationsByServerId, updateReservationStatus, deleteReservation, addReservation, type Reservation } from '@/lib/reservations';
+import { getReservationsByServerId, updateReservationStatus, deleteReservation, addReservation, updateReservation, type Reservation } from '@/lib/reservations';
 import { triggerSync } from '@/lib/sync';
 import { cn } from '@/components/ui/core';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +22,17 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
     const [dateFilter, setDateFilter] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+    const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
+    const [tempStaffNotes, setTempStaffNotes] = useState('');
+    const [tempStructured, setTempStructured] = useState<any>({});
+    const [tempCoreData, setTempCoreData] = useState<any>({});
+    const [isSavingNotes, setIsSavingNotes] = useState(false);
+    const [isSavingStructured, setIsSavingStructured] = useState(false);
+    const [isSavingCore, setIsSavingCore] = useState(false);
+
+
+
 
     const fetchReservations = async (silent = false) => {
         if (!silent) setIsLoading(true);
@@ -94,7 +105,8 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
     });
 
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [newRes, setNewRes] = useState({ name: '', phone: '', date: '', time: '', pax: 2 });
+    const [newRes, setNewRes] = useState({ name: '', phone: '', date: '', time: '', pax: 2, notes: '' });
+
 
     const handleCreate = async () => {
         if (!newRes.name || !newRes.phone || !newRes.date || !newRes.time || !newRes.pax) {
@@ -111,11 +123,13 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
             time: newRes.time,
             partySize: newRes.pax,
             source: 'Phone',
-            status: 'pending'
+            status: 'pending',
+            notes: newRes.notes
         });
 
         setIsCreateOpen(false);
-        setNewRes({ name: '', phone: '', date: '', time: '', pax: 2 });
+        setNewRes({ name: '', phone: '', date: '', time: '', pax: 2, notes: '' });
+
         await triggerSync();
         fetchReservations();
     };
@@ -139,14 +153,16 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
             res.customerPhone,
             res.partySize.toString(),
             `${res.date} ${res.time}`,
-            res.status.toUpperCase()
+            res.status.toUpperCase(),
+            res.staff_notes || res.notes || ''
         ]);
 
         // Generate Table
         autoTable(doc, {
             startY: 45,
-            head: [[t('customer'), 'Phone', 'Pax', `${t('date')} & ${t('time')}`, t('status')]],
+            head: [[t('customer'), 'Phone', 'Pax', `${t('date')} & ${t('time')}`, t('status'), t('notes')]],
             body: tableData,
+
             theme: 'plain', // Plain theme for B&W
             headStyles: {
                 fillColor: [0, 0, 0], // Black header
@@ -329,6 +345,238 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                 </div>
             </div>
 
+            {/* Detail Modal Overlay */}
+            <AnimatePresence>
+                {isDetailOpen && selectedReservation && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="w-full max-w-2xl bg-pterodark border border-pteroborder rounded-2xl shadow-[0_32px_64px_rgba(0,0,0,0.5)] overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-pteroborder flex justify-between items-center bg-pterocard/20">
+                                <div>
+                                    <h3 className="text-xl font-bold text-pterotext">{t('reservationDetails')}</h3>
+                                    <p className="text-xs text-pterosub font-mono">ID: {selectedReservation.id} • {selectedReservation.source}</p>
+                                </div>
+                                <button onClick={() => setIsDetailOpen(false)} className="p-2 hover:bg-pteroborder/50 rounded-full text-pterosub hover:text-white transition-colors">
+                                    <XCircle size={24} />
+                                </button>
+                            </div>
+
+                            <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar space-y-8">
+                                {/* Core Info Grid (Editable) */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">Main Reservation Data</h5>
+                                        {JSON.stringify(tempCoreData) !== JSON.stringify({
+                                            customerName: selectedReservation.customerName,
+                                            partySize: selectedReservation.partySize,
+                                            date: selectedReservation.date,
+                                            time: selectedReservation.time
+                                        }) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsSavingCore(true);
+                                                        await updateReservation(selectedReservation.id, tempCoreData);
+                                                        await fetchReservations(true);
+                                                        setSelectedReservation({ ...selectedReservation, ...tempCoreData });
+                                                        setIsSavingCore(false);
+                                                    }}
+                                                    disabled={isSavingCore}
+                                                    className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
+                                                >
+                                                    {isSavingCore ? 'Saving...' : 'Save & Notify'}
+                                                </button>
+                                            )}
+                                    </div>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div className="p-3 bg-pterocard/30 border border-pteroborder/50 rounded-xl focus-within:border-pteroblue/30 transition-colors">
+                                            <p className="text-[10px] font-black text-pterosub uppercase tracking-widest mb-1">{t('customer')}</p>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-transparent font-bold text-pterotext outline-none text-sm"
+                                                value={tempCoreData.customerName || ''}
+                                                onChange={(e) => setTempCoreData({ ...tempCoreData, customerName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-pterocard/30 border border-pteroborder/50 rounded-xl focus-within:border-pteroblue/30 transition-colors">
+                                            <p className="text-[10px] font-black text-pterosub uppercase tracking-widest mb-1">{t('people')}</p>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-transparent font-bold text-pterotext outline-none text-sm"
+                                                value={tempCoreData.partySize || ''}
+                                                onChange={(e) => setTempCoreData({ ...tempCoreData, partySize: parseInt(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-pterocard/30 border border-pteroborder/50 rounded-xl focus-within:border-pteroblue/30 transition-colors">
+                                            <p className="text-[10px] font-black text-pterosub uppercase tracking-widest mb-1">{t('date')}</p>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-transparent font-bold text-pterotext outline-none text-sm"
+                                                value={tempCoreData.date || ''}
+                                                onChange={(e) => setTempCoreData({ ...tempCoreData, date: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-pterocard/30 border border-pteroborder/50 rounded-xl focus-within:border-pteroblue/30 transition-colors">
+                                            <p className="text-[10px] font-black text-pterosub uppercase tracking-widest mb-1">{t('time')}</p>
+                                            <input
+                                                type="time"
+                                                className="w-full bg-transparent font-bold text-pterotext outline-none text-sm"
+                                                value={tempCoreData.time || ''}
+                                                onChange={(e) => setTempCoreData({ ...tempCoreData, time: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                {/* Additional Commentaries Section */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-px flex-1 bg-pteroborder/50" />
+                                        <h4 className="text-[10px] font-black text-pteroblue uppercase tracking-[0.2em]">Additional Commentaries</h4>
+                                        <div className="h-px flex-1 bg-pteroborder/50" />
+                                    </div>
+
+                                    {/* Structured Data */}
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h5 className="text-[10px] font-bold text-pterosub uppercase tracking-widest">AI Categorized Data</h5>
+                                            {JSON.stringify(tempStructured) !== JSON.stringify(typeof selectedReservation.structured_commentary === 'string' ? JSON.parse(selectedReservation.structured_commentary) : (selectedReservation.structured_commentary || {})) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsSavingStructured(true);
+                                                        await updateReservation(selectedReservation.id, { structured_commentary: tempStructured });
+                                                        await fetchReservations(true);
+                                                        setSelectedReservation({ ...selectedReservation, structured_commentary: tempStructured });
+                                                        setIsSavingStructured(false);
+                                                    }}
+                                                    disabled={isSavingStructured}
+                                                    className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
+                                                >
+                                                    {isSavingStructured ? 'Saving...' : 'Save AI Data'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {(() => {
+                                                const labels: any = {
+                                                    occasion: "Occasion/Event",
+                                                    preferences: "Seating Preferences",
+                                                    allergies: "Dietary Restrictions",
+                                                    special_requests: "Special Requests"
+                                                };
+
+                                                return Object.entries(labels).map(([key, label]: [string, any]) => {
+                                                    let val = tempStructured[key];
+                                                    const hasData = val && val !== "None" && val !== "No data" && val !== "text";
+
+                                                    return (
+                                                        <div key={key} className={cn(
+                                                            "p-4 rounded-xl border transition-all bg-pterocard/10 border-pteroborder/30 focus-within:border-pteroblue/50 focus-within:bg-pteroblue/5",
+                                                            hasData && "border-pteroblue/30"
+                                                        )}>
+                                                            <p className="text-[10px] font-bold text-pterosub uppercase tracking-widest mb-2 flex items-center gap-2">
+                                                                {hasData && <div className="w-1.5 h-1.5 bg-pteroblue rounded-full animate-pulse" />}
+                                                                {label}
+                                                            </p>
+                                                            <input
+                                                                type="text"
+                                                                className="w-full bg-transparent text-sm text-pterotext font-medium outline-none placeholder:text-pterosub/50 placeholder:italic"
+                                                                value={val || ''}
+                                                                onChange={(e) => setTempStructured({ ...tempStructured, [key]: e.target.value })}
+                                                                placeholder={t('noAdditionalInfo')}
+                                                            />
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                    </div>
+
+
+                                    {/* Staff Notes (Editable) */}
+                                    <div className="space-y-2 pt-4">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-black text-pterosub uppercase tracking-widest flex items-center gap-2">
+                                                <RefreshCw size={12} className="text-yellow-400" />
+                                                Staff Notes (Priority)
+                                            </label>
+                                            {tempStaffNotes !== (selectedReservation.staff_notes || '') && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsSavingNotes(true);
+                                                        await updateReservation(selectedReservation.id, { staff_notes: tempStaffNotes });
+                                                        await fetchReservations(true);
+                                                        setSelectedReservation({ ...selectedReservation, staff_notes: tempStaffNotes });
+                                                        setIsSavingNotes(false);
+                                                    }}
+                                                    disabled={isSavingNotes}
+                                                    className="text-[10px] font-bold text-pteroblue hover:underline flex items-center gap-1"
+                                                >
+                                                    {isSavingNotes ? 'Saving...' : 'Save Changes'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <textarea
+                                            className="w-full h-24 bg-pterodark border border-pteroborder rounded-xl p-3 text-sm text-pterotext focus:border-pteroblue outline-none transition-all resize-none"
+                                            placeholder="Enter manual notes here... (AI data will be kept but manual notes take priority on panel views)"
+                                            value={tempStaffNotes}
+                                            onChange={(e) => setTempStaffNotes(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Raw WhatsApp Commentary (Collapsible) */}
+                                    {selectedReservation.raw_commentary ? (
+                                        <div className="pt-4">
+                                            <details className="group">
+                                                <summary className="list-none cursor-pointer flex items-center gap-2 text-[10px] font-black text-pterosub uppercase tracking-widest hover:text-pterotext transition-colors">
+                                                    <MoreVertical size={12} className="group-open:rotate-90 transition-transform" />
+                                                    Original WhatsApp Conversation
+                                                </summary>
+                                                <div className="mt-3 p-4 bg-pterocard/50 border border-pteroborder/50 rounded-xl text-xs text-pterosub font-mono whitespace-pre-wrap leading-relaxed">
+                                                    {selectedReservation.raw_commentary}
+                                                </div>
+                                            </details>
+                                        </div>
+                                    ) : (
+                                        <div className="pt-4 p-4 border border-dashed border-pteroborder rounded-xl text-center">
+                                            <p className="text-xs text-pterosub italic">{t('noAdditionalInfo')}</p>
+                                        </div>
+                                    )}
+
+                                </div>
+                            </div>
+
+                            <div className="p-6 border-t border-pteroborder bg-pterocard/10 flex justify-between items-center">
+                                <Button variant="secondary" onClick={() => setIsDetailOpen(false)}>Close</Button>
+                                <div className="flex gap-2">
+                                    {selectedReservation.status !== 'confirmed' && (
+                                        <Button
+                                            className="bg-green-600 hover:bg-green-700 text-white"
+                                            onClick={() => { handleStatusChange(selectedReservation.id, 'confirmed'); setIsDetailOpen(false); }}
+                                        >
+                                            Confirm Booking
+                                        </Button>
+                                    )}
+                                    {selectedReservation.status !== 'cancelled' && (
+                                        <Button
+                                            variant="secondary"
+                                            className="text-red-400 hover:bg-red-400/10 border-red-400/20"
+                                            onClick={() => { handleStatusChange(selectedReservation.id, 'cancelled'); setIsDetailOpen(false); }}
+                                        >
+                                            Cancel
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* Create Modal Overlay */}
             {isCreateOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -363,7 +611,17 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                 <input type="number" className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext"
                                     value={newRes.pax} onChange={e => setNewRes({ ...newRes, pax: parseInt(e.target.value) })} min={1} required />
                             </div>
+                            <div>
+                                <label className="text-xs text-pterosub uppercase font-bold block mb-1">{t('notes')}</label>
+                                <textarea
+                                    className="w-full bg-pterocard border border-pteroborder rounded px-3 py-2 text-sm text-pterotext h-24 resize-none outline-none focus:border-pteroblue transition-all"
+                                    value={newRes.notes}
+                                    onChange={e => setNewRes({ ...newRes, notes: e.target.value })}
+                                    placeholder="Enter additional info or special requests..."
+                                />
+                            </div>
                         </div>
+
                         <div className="p-4 border-t border-pteroborder flex justify-end gap-2">
                             <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>{t('cancel')}</Button>
                             <Button onClick={handleCreate}>{t('confirm')}</Button>
@@ -475,6 +733,28 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                         )}
                                         <div className="w-px h-4 bg-pteroborder mx-1" />
                                         <button
+                                            onClick={() => {
+                                                setSelectedReservation(res);
+                                                setTempStaffNotes(res.staff_notes || '');
+                                                const struct = typeof res.structured_commentary === 'string'
+                                                    ? JSON.parse(res.structured_commentary)
+                                                    : (res.structured_commentary || {});
+                                                setTempStructured(struct);
+                                                setTempCoreData({
+                                                    customerName: res.customerName,
+                                                    partySize: res.partySize,
+                                                    date: res.date,
+                                                    time: res.time
+                                                });
+                                                setIsDetailOpen(true);
+                                            }}
+                                            className="p-1.5 hover:bg-pteroblue/10 text-pterosub hover:text-pteroblue rounded transition-colors"
+                                            title={t('reservationDetails')}
+                                        >
+
+                                            <MoreVertical size={16} />
+                                        </button>
+                                        <button
                                             onClick={() => handleDelete(res.id)}
                                             className="p-1.5 hover:bg-red-500/10 text-pterosub hover:text-red-500 rounded transition-colors"
                                             title={t('delete')}
@@ -482,13 +762,13 @@ export function ReservationTable({ userId, serverId }: ReservationTableProps) {
                                             <Trash2 size={16} />
                                         </button>
                                     </div>
-                                    <button className="p-1.5 text-pterosub group-hover:hidden">
-                                        <MoreVertical size={16} />
-                                    </button>
+                                    {/* Removed group-hover:hidden button to prevent flickering/hiding */}
                                 </td>
                             </tr>
                         ))}
                     </tbody>
+
+
                 </table>
             </div>
         </Card>

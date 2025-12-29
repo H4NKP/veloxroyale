@@ -1,6 +1,8 @@
 // Mock authentication store with localStorage persistence
 // This simulates a shared user database that persists across refreshes
 
+import bcrypt from 'bcryptjs';
+
 export interface User {
     id: number;
     email: string;
@@ -8,6 +10,8 @@ export interface User {
     role: 'admin' | 'customer';
     status: 'active' | 'suspended';
     suspension_message?: string;
+    reset_token?: string;
+    reset_token_expiry?: string;
     created_at: string;
 }
 
@@ -83,19 +87,38 @@ async function isRemoteDb(): Promise<boolean> {
 }
 
 export async function authenticateUser(identifier: string, password: string): Promise<User | null> {
-    if (await isRemoteDb()) {
+    const remote = await isRemoteDb();
+    let user: User | null = null;
+
+    if (remote) {
         const res = await fetch(`/api/users?email=${identifier}`);
         const data = await res.json();
-        const user = Array.isArray(data) ? data[0] : null;
-        // Password check usually server-side, but here we still have pseudo-auth
-        if (user && user.password === password) return user;
+        user = Array.isArray(data) ? data[0] : null;
+    } else {
+        usersDB = loadUsers();
+        user = usersDB.find(
+            u => (u.email === identifier || u.email.split('@')[0] === identifier)
+        ) || null;
     }
 
-    usersDB = loadUsers();
-    const user = usersDB.find(
-        u => (u.email === identifier || u.email.split('@')[0] === identifier) && u.password === password
-    );
-    return user || null;
+    if (!user) return null;
+
+    // Check password
+    let isMatch = false;
+    try {
+        isMatch = await bcrypt.compare(password, user.password);
+    } catch {
+        // Fallback for plain text (migration)
+        isMatch = user.password === password;
+
+        if (isMatch) {
+            // Transparent migration: Update to hash
+            const hashedPassword = await bcrypt.hash(password, 10);
+            await updateUser(user.id, { password: hashedPassword });
+        }
+    }
+
+    return isMatch ? user : null;
 }
 
 export async function getAllUsers(): Promise<User[]> {
@@ -139,16 +162,20 @@ export async function createUser(userData: Omit<User, 'id' | 'created_at'>): Pro
     const remote = await isRemoteDb();
     let newUser: User;
 
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    const dataToSave = { ...userData, password: hashedPassword };
+
     if (remote) {
         const res = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userData)
+            body: JSON.stringify(dataToSave)
         });
         newUser = await res.json();
     } else {
         newUser = {
             ...userData,
+            password: hashedPassword,
             id: usersDB.length > 0 ? Math.max(...usersDB.map(u => u.id)) + 1 : 1,
             created_at: new Date().toISOString().split('T')[0]
         } as User;
@@ -160,13 +187,53 @@ export async function createUser(userData: Omit<User, 'id' | 'created_at'>): Pro
     return { ...newUser, password: '***' } as User;
 }
 
-export async function updateUser(id: number, updates: Partial<User>): Promise<User | null> {
+export async function updateUser(id: number, updates: Partial<User>, resetToken?: string): Promise<User | null> {
     const remote = await isRemoteDb();
-    if (remote) {
+
+    // Hash password if it's being updated
+    if (updates.password) {
+        const { oldPassword } = updates as any;
+        const currentUserId = id;
+
+        if (remote) {
+            await fetch('/api/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, resetToken, ...updates })
+            });
+
+            // Re-fetch usersDB to stay in sync for local fallback
+            const res = await fetch('/api/users?adminAccess=true');
+            const data = await res.json();
+            if (Array.isArray(data)) saveUsers(data);
+            return getUserById(id);
+        }
+
+        // Local Mode Check
+        usersDB = loadUsers();
+        const user = usersDB.find(u => u.id === id);
+        if (!user) return null;
+
+        // If not a reset token flow, require and check old password
+        if (!resetToken) {
+            if (!oldPassword) {
+                throw new Error('Current password is required to set a new password.');
+            }
+
+            const isMatch = await bcrypt.compare(oldPassword, user.password);
+            if (!isMatch) {
+                throw new Error('Incorrect current password.');
+            }
+        }
+
+        if (!updates.password.startsWith('$2a$')) {
+            updates.password = await bcrypt.hash(updates.password, 10);
+        }
+    } else if (remote) {
         await fetch('/api/users', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, ...updates })
+            body: JSON.stringify({ id, resetToken, ...updates })
         });
     }
 
@@ -175,6 +242,13 @@ export async function updateUser(id: number, updates: Partial<User>): Promise<Us
     if (index === -1) return null;
 
     usersDB[index] = { ...usersDB[index], ...updates };
+
+    // Auto-clear reset token if password was updated (security best practice)
+    if (updates.password) {
+        usersDB[index].reset_token = undefined;
+        usersDB[index].reset_token_expiry = undefined;
+    }
+
     saveUsers(usersDB);
     return { ...usersDB[index], password: '***' } as User;
 }

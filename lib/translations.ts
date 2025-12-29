@@ -13,6 +13,7 @@ export const translations = {
         restaurants: "Restaurants",
         panelLife: "Panel Life",
         system: "System",
+        configuration: "Configuration",
         language: "Language",
         userManagement: "User Management",
         users: "Users",
@@ -34,6 +35,9 @@ export const translations = {
         actions: "Actions",
         confirm: "Confirm",
         cancel: "Cancel",
+        notes: "Notes",
+        reservationDetails: "Reservation Details",
+        noAdditionalInfo: "No additional info provided",
         delete: "Delete",
         noReservations: "No Data",
 
@@ -103,7 +107,6 @@ export const translations = {
         owner: "Owner",
         operational: "Operational",
         suspended: "Suspended",
-        configuration: "Configuration",
         suspend: "Suspend",
         resume: "Resume",
         connect: "Connect",
@@ -137,6 +140,7 @@ export const translations = {
 
         // Admin Backups
         systemBackups: "System Backups",
+        uploadBackup: "Upload Backup",
         systemBackupsDesc: "Manage and schedule full system archives.",
         createBackupNow: "Create Backup Now",
         operationInProgress: "Operation in Progress...",
@@ -255,6 +259,8 @@ export const translations = {
         updateAvailable: "Update Available",
         repoConfig: "Repository Configuration",
         repoUrl: "Repository URL",
+        appearance: "Appearance",
+        appearanceDesc: "Customize the admin panel look and feel.",
         branch: "Branch",
         panelVersion: "Panel Version",
         checkForUpdates: "Check for Updates",
@@ -344,6 +350,9 @@ export const translations = {
         actions: "Acciones",
         confirm: "Confirmar",
         cancel: "Cancelar",
+        notes: "Notas",
+        reservationDetails: "Detalles de la Reserva",
+        noAdditionalInfo: "No se proporcionó información adicional",
         delete: "Eliminar",
         noReservations: "Sin Datos",
 
@@ -449,6 +458,7 @@ export const translations = {
 
         // Admin Backups
         systemBackups: "Respaldos del Sistema",
+        uploadBackup: "Subir Respaldo",
         systemBackupsDesc: "Gestiona y programa archivos completos del sistema.",
         createBackupNow: "Crear Respaldo Ahora",
         operationInProgress: "Operación en Progreso...",
@@ -567,6 +577,8 @@ export const translations = {
         updateAvailable: "Actualización Disponible",
         repoConfig: "Configuración del Repositorio",
         repoUrl: "URL del Repositorio",
+        appearance: "Apariencia",
+        appearanceDesc: "Personaliza el aspecto del panel de administración.",
         branch: "Rama",
         panelVersion: "Versión del Panel",
         checkForUpdates: "Buscar Actualizaciones",

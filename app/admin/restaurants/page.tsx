@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, Button, Input, Badge } from '@/components/ui/core';
 import { Modal } from '@/components/ui/modal';
-import { Server as ServerIcon, Shield, ShieldOff, Plus, ExternalLink, Settings2, Power, PowerOff, Activity } from 'lucide-react';
+import { Server as ServerIcon, Shield, ShieldOff, Plus, ExternalLink, Settings2, Power, PowerOff, Activity, Globe } from 'lucide-react';
+
 import { getAllUsers, type User } from '@/lib/auth';
 import { getAllServers, createServer, updateServer, deleteServer, type Server } from '@/lib/servers';
 import { triggerSync } from '@/lib/sync';
@@ -198,6 +199,7 @@ function CreateServerModal({ isOpen, onClose, clients, onCreated }: any) {
     const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState('');
     const [whatsappClientId, setWhatsappClientId] = useState('');
     const [whatsappClientSecret, setWhatsappClientSecret] = useState('');
+    const [aiLanguage, setAiLanguage] = useState<'es' | 'en' | 'both'>('es');
     const [isCreating, setIsCreating] = useState(false);
 
     const handleCreate = async () => {
@@ -207,7 +209,6 @@ function CreateServerModal({ isOpen, onClose, clients, onCreated }: any) {
         }
         setIsCreating(true);
 
-        // Validate Gemini Key if it's not a mock key
         if (openaiKey && openaiKey !== 'mock_ai_key_123') {
             const isValid = await validateGeminiKey(openaiKey);
             if (!isValid) {
@@ -228,12 +229,19 @@ function CreateServerModal({ isOpen, onClose, clients, onCreated }: any) {
             whatsappPhoneNumberId: whatsappPhoneNumberId,
             whatsappClientId: whatsappClientId,
             whatsappClientSecret: whatsappClientSecret,
+            config: {
+                aiLanguage: aiLanguage,
+                maxSeats: 50,
+                openTime: '09:00',
+                closeTime: '22:00',
+                openDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            }
         });
+
         await triggerSync();
         setIsCreating(false);
         onCreated();
         onClose();
-        // Reset form
         setName('');
         setOpenaiKey('');
         setWhatsappToken('');
@@ -333,6 +341,24 @@ function CreateServerModal({ isOpen, onClose, clients, onCreated }: any) {
                     </div>
                 </div>
 
+                <div className="space-y-4 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                    <h4 className="text-xs font-bold text-purple-400 uppercase flex items-center gap-2">
+                        <Globe size={14} /> {t('aiSettings')}
+                    </h4>
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-pterosub uppercase">{t('aiLanguage')}</label>
+                        <select
+                            className="w-full bg-pterodark border border-pteroborder text-sm text-pterotext rounded-md px-3 py-2 outline-none focus:border-pteroblue transition-all"
+                            value={aiLanguage}
+                            onChange={(e) => setAiLanguage(e.target.value as any)}
+                        >
+                            <option value="es">{t('aiLangOption_es')}</option>
+                            <option value="en">{t('aiLangOption_en')}</option>
+                            <option value="both">{t('aiLangOption_both')}</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div className="pt-4 flex justify-end gap-3">
                     <Button variant="ghost" onClick={onClose} disabled={isCreating}>{t('cancel')}</Button>
                     <Button onClick={handleCreate} disabled={isCreating}>
@@ -351,12 +377,11 @@ function ServerDetailsModal({ isOpen, onClose, server }: any) {
     const [whatsappBusinessId, setWhatsappBusinessId] = useState(server.whatsappBusinessId || '');
     const [whatsappClientId, setWhatsappClientId] = useState(server.whatsappClientId || '');
     const [whatsappClientSecret, setWhatsappClientSecret] = useState(server.whatsappClientSecret || '');
+    const [aiLanguage, setAiLanguage] = useState<'es' | 'en' | 'both'>(server.config?.aiLanguage || 'es');
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = async () => {
         setIsSaving(true);
-
-        // Validate Gemini Key if it's not a mock key
         if (openaiKey && openaiKey !== 'mock_ai_key_123') {
             const isValid = await validateGeminiKey(openaiKey);
             if (!isValid) {
@@ -366,13 +391,16 @@ function ServerDetailsModal({ isOpen, onClose, server }: any) {
                 return;
             }
         }
-
         await updateServer(server.id, {
             aiApiKey: openaiKey,
             whatsappApiToken: whatsappToken,
             whatsappBusinessId: whatsappBusinessId,
             whatsappClientId: whatsappClientId,
-            whatsappClientSecret: whatsappClientSecret
+            whatsappClientSecret: whatsappClientSecret,
+            config: {
+                ...server.config,
+                aiLanguage: aiLanguage
+            }
         });
         await triggerSync();
         setTimeout(() => setIsSaving(false), 500);
@@ -441,10 +469,23 @@ function ServerDetailsModal({ isOpen, onClose, server }: any) {
                                 />
                             </div>
                         </div>
-                        <Button className="w-full mt-2" onClick={handleSave} disabled={isSaving}>
-                            {isSaving ? t('validating') : t('updateCredentials')}
-                        </Button>
                     </div>
+
+                    <div className="space-y-2 pt-2 border-t border-pteroborder">
+                        <label className="text-[10px] font-bold text-pterosub uppercase">{t('aiLanguage')}</label>
+                        <select
+                            className="w-full bg-pterodark border border-pteroborder text-sm text-pterotext rounded-md px-3 py-2 outline-none focus:border-pteroblue transition-all"
+                            value={aiLanguage}
+                            onChange={(e) => setAiLanguage(e.target.value as any)}
+                        >
+                            <option value="es">{t('aiLangOption_es')}</option>
+                            <option value="en">{t('aiLangOption_en')}</option>
+                            <option value="both">{t('aiLangOption_both')}</option>
+                        </select>
+                    </div>
+                    <Button className="w-full mt-2" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? t('validating') : t('updateCredentials')}
+                    </Button>
                 </div>
 
                 <div className="p-4 bg-pterodark border border-pteroborder rounded-lg flex items-center justify-between">
@@ -459,13 +500,16 @@ function ServerDetailsModal({ isOpen, onClose, server }: any) {
                     <p className="text-[10px] text-pterosub">{t('createdOn')}: {server.created_at}</p>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end pt-4">
                     <Button onClick={onClose}>{t('close')}</Button>
                 </div>
             </div>
         </Modal>
     );
 }
+
+
+
 
 function DetailItem({ label, value, sub }: { label: string, value: string, sub: string }) {
     return (

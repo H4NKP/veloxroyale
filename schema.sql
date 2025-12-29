@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role ENUM('admin', 'customer') DEFAULT 'customer',
   status ENUM('active', 'suspended') DEFAULT 'active',
+  reset_token VARCHAR(255),
+  reset_token_expiry DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -20,6 +22,9 @@ CREATE TABLE IF NOT EXISTS reservations (
   source VARCHAR(50) DEFAULT 'web',
   notes TEXT,
   allergies TEXT,
+  raw_commentary TEXT,
+  structured_commentary JSON,
+  staff_notes TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
 );

@@ -77,6 +77,17 @@ let serversDB: Server[] = loadServers();
 
 // Helper para ver si la DB remota está activada
 async function isRemoteDb(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+        // En el servidor, chequeamos directamente el config o env
+        try {
+            const { getDbConfig } = await import('./db');
+            const config = getDbConfig();
+            return config?.enabled === true;
+        } catch {
+            return false;
+        }
+    }
+
     try {
         const res = await fetch('/api/db/config');
         const data = await res.json();
@@ -87,7 +98,24 @@ async function isRemoteDb(): Promise<boolean> {
 }
 
 export async function getAllServers(): Promise<Server[]> {
-    if (typeof window === 'undefined') return initialServers;
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                const results: any = await query('SELECT * FROM servers');
+                return results.map((s: any) => ({
+                    ...s,
+                    config: typeof s.config === 'string' ? JSON.parse(s.config) : s.config,
+                    subUsers: typeof s.subUsers === 'string' ? JSON.parse(s.subUsers) : s.subUsers
+                }));
+            } catch (e) {
+                console.error("[getAllServers] Server SQL Error:", e);
+                return initialServers;
+            }
+        }
+        return initialServers;
+    }
 
     if (await isRemoteDb()) {
         const res = await fetch('/api/servers?adminAccess=true');
@@ -103,6 +131,7 @@ export async function getAllServers(): Promise<Server[]> {
     return [...serversDB];
 }
 
+
 export async function getServersByUserId(userId: number): Promise<Server[]> {
     if (typeof window === 'undefined') return [];
 
@@ -117,6 +146,26 @@ export async function getServersByUserId(userId: number): Promise<Server[]> {
 }
 
 export async function createServer(serverData: Omit<Server, 'id' | 'created_at' | 'powerStatus'>): Promise<Server> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                const keys = Object.keys(serverData);
+                const placeholders = keys.map(() => '?').join(', ');
+                const values = Object.values(serverData).map(v =>
+                    typeof v === 'object' ? JSON.stringify(v) : v
+                );
+                const sql = `INSERT INTO servers (${keys.join(', ')}, created_at, powerStatus) VALUES (${placeholders}, ?, ?)`;
+                const date = new Date().toISOString().split('T')[0];
+                const result: any = await query(sql, [...values, date, 'offline']);
+                return { id: result.insertId, created_at: date, powerStatus: 'offline', ...serverData } as Server;
+            } catch (e) {
+                console.error("[createServer] Server SQL Error:", e);
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     let newServer: Server;
 
@@ -144,6 +193,23 @@ export async function createServer(serverData: Omit<Server, 'id' | 'created_at' 
 }
 
 export async function updateServer(id: number, updates: Partial<Server>): Promise<Server | null> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+                const values = Object.values(updates).map(v =>
+                    typeof v === 'object' ? JSON.stringify(v) : v
+                );
+                await query(`UPDATE servers SET ${fields} WHERE id = ?`, [...values, id]);
+                return { id, ...updates } as any;
+            } catch (e) {
+                console.error("[updateServer] Server SQL Error:", e);
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     if (remote) {
         await fetch('/api/servers', {
@@ -163,6 +229,20 @@ export async function updateServer(id: number, updates: Partial<Server>): Promis
 }
 
 export async function deleteServer(id: number): Promise<boolean> {
+    if (typeof window === 'undefined') {
+        const remote = await isRemoteDb();
+        if (remote) {
+            try {
+                const { query } = await import('./db');
+                await query('DELETE FROM servers WHERE id = ?', [id]);
+                return true;
+            } catch (e) {
+                console.error("[deleteServer] Server SQL Error:", e);
+                return false;
+            }
+        }
+    }
+
     const remote = await isRemoteDb();
     if (remote) {
         await fetch(`/api/servers?id=${id}`, { method: 'DELETE' });
@@ -176,4 +256,5 @@ export async function deleteServer(id: number): Promise<boolean> {
     saveServers(serversDB);
     return true;
 }
+
 

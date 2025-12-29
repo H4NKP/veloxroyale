@@ -18,7 +18,10 @@ import {
     ShieldAlert,
     Database,
     Activity,
-    Globe
+    Globe,
+    Mail,
+    Calendar,
+    Image
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -70,22 +73,27 @@ export function Sidebar({ type }: SidebarProps) {
 
     const systemSubmenu = [
         { name: t('language'), href: '/admin/system/language', icon: Globe },
+        { name: t('appearance'), href: '/admin/system/appearance', icon: Image },
+        { name: 'SMTP Server', href: '/admin/system/smtp', icon: Mail },
     ];
 
     const links = type === 'admin' ? adminLinks : userLinks;
+    const activeServerId = searchParams.get('serverId');
+
+    const handleDashboardClick = () => {
+        // Explicitly nav to panel base to show server selection
+        router.push(`/panel?userId=${userId}`);
+    };
 
     const handleLogout = () => {
-        // Clear history and force reload to login
         if (typeof window !== 'undefined') {
-            // Replace all history with login page
             window.history.replaceState(null, '', '/');
-            // Force full page reload
             window.location.replace('/');
         }
     };
 
     return (
-        <aside className="fixed left-0 top-0 h-full w-64 bg-pterodark border-r border-pteroborder flex flex-col z-50">
+        <aside className="fixed left-0 top-0 h-full w-64 bg-pterodark/80 backdrop-blur-sm border-r border-pteroborder flex flex-col z-50">
             <div className="h-16 flex items-center justify-center border-b border-pteroborder">
                 <Link href={`${type === 'admin' ? '/admin' : '/panel'}?userId=${userId}`}>
                     <h1 className="text-xl font-bold tracking-tight text-pterotext hover:opacity-80 transition-opacity cursor-pointer">
@@ -97,14 +105,17 @@ export function Sidebar({ type }: SidebarProps) {
             <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                 {links.map((link) => {
                     const Icon = link.icon;
-                    const isActive = pathname === link.href && !window.location.search;
+                    const isDashboard = link.name === t('dashboard');
+                    const isActive = isDashboard
+                        ? (pathname === link.href && !activeServerId)
+                        : (pathname === link.href && !window.location.search);
 
                     return (
-                        <Link
+                        <button
                             key={link.href}
-                            href={`${link.href}${pathname.startsWith('/panel') || pathname.startsWith('/admin/monitor') ? (window.location.search || '') : ''}`}
+                            onClick={isDashboard ? handleDashboardClick : () => router.push(`${link.href}?userId=${userId}`)}
                             className={cn(
-                                "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
+                                "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                                 isActive
                                     ? "bg-pteroblue/10 text-pteroblue border border-pteroblue/20"
                                     : "text-pterosub hover:text-pterotext hover:bg-pterocard"
@@ -112,7 +123,7 @@ export function Sidebar({ type }: SidebarProps) {
                         >
                             <Icon size={18} />
                             {link.name}
-                        </Link>
+                        </button>
                     );
                 })}
 
@@ -120,21 +131,25 @@ export function Sidebar({ type }: SidebarProps) {
                 {type === 'user' && myServers.length > 0 && (
                     <div className="space-y-1 mt-4">
                         <p className="px-4 text-[10px] font-bold text-pterosub uppercase tracking-widest mb-2">My Restaurants</p>
-                        {myServers.map(server => (
-                            <Link
-                                key={server.id}
-                                href={`/panel?serverId=${server.id}&userId=${userId}`}
-                                className={cn(
-                                    "flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                                    searchParams.get('serverId') === String(server.id)
-                                        ? "bg-pteroblue/10 text-pteroblue border border-pteroblue/20"
-                                        : "text-pterosub hover:text-pterotext hover:bg-pterocard"
-                                )}
-                            >
-                                <div className={cn("w-2 h-2 rounded-full", server.powerStatus === 'running' ? "bg-green-500" : "bg-red-500")} />
-                                {server.name}
-                            </Link>
-                        ))}
+                        {myServers.map(server => {
+                            const isSelected = activeServerId === String(server.id);
+                            return (
+                                <div key={server.id} className="space-y-1">
+                                    <Link
+                                        href={`/panel?serverId=${server.id}&userId=${userId}&tab=system`}
+                                        className={cn(
+                                            "flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                                            isSelected
+                                                ? "bg-pteroblue/10 text-pteroblue border border-pteroblue/20"
+                                                : "text-pterosub hover:text-pterotext hover:bg-pterocard"
+                                        )}
+                                    >
+                                        <div className={cn("w-2 h-2 rounded-full", server.powerStatus === 'running' ? "bg-green-500" : "bg-red-500")} />
+                                        {server.name}
+                                    </Link>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
 
@@ -227,21 +242,22 @@ export function Sidebar({ type }: SidebarProps) {
                         )}
                     </div>
                 )}
+
+
             </nav>
 
             <div className="p-4 border-t border-pteroborder flex gap-2">
                 <Link
                     href={`${type === 'admin' ? '/admin/profile' : '/panel/profile'}?userId=${userId}`}
                     className="flex items-center justify-center w-12 h-12 rounded-lg text-pterosub hover:text-pterotext hover:bg-pterocard transition-all duration-200 border border-transparent hover:border-pteroborder"
-                    title="My Profile"
                 >
                     <UserCog size={20} />
                 </Link>
                 <button
                     onClick={handleLogout}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-red-400 hover:bg-red-400/10 hover:text-red-300 transition-colors border border-transparent hover:border-red-400/20"
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all duration-200 font-medium"
                 >
-                    <LogOut size={18} />
+                    <LogOut size={16} />
                     {t('logout')}
                 </button>
             </div>

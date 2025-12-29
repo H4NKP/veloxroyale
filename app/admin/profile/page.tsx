@@ -8,6 +8,7 @@ import { getUserById, updateUser, type User } from '@/lib/auth';
 export default function AdminProfilePage() {
     const [user, setUser] = useState<User | null>(null);
     const [email, setEmail] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -32,6 +33,7 @@ export default function AdminProfilePage() {
         if (!user) return;
 
         if (newPassword && newPassword !== confirmPassword) {
+            alert('the password doesnt match');
             setMessage({ type: 'error', text: 'Passwords do not match.' });
             return;
         }
@@ -40,18 +42,32 @@ export default function AdminProfilePage() {
         setMessage(null);
 
         const updates: Partial<User> = { email };
-        if (newPassword) updates.password = newPassword;
+        if (newPassword) {
+            if (!currentPassword) {
+                setMessage({ type: 'error', text: 'Current password is required to set a new password.' });
+                setIsSaving(false);
+                return;
+            }
+            (updates as any).oldPassword = currentPassword;
+            updates.password = newPassword;
+        }
 
-        await updateUser(user.id, updates);
+        try {
+            await updateUser(user.id, updates);
 
-        // Re-fetch to confirm
-        const updated = await getUserById(user.id);
-        if (updated) setUser(updated);
+            // Re-fetch to confirm
+            const updated = await getUserById(user.id);
+            if (updated) setUser(updated);
 
-        setIsSaving(false);
-        setMessage({ type: 'success', text: 'Admin profile updated successfully!' });
-        setNewPassword('');
-        setConfirmPassword('');
+            setIsSaving(false);
+            setMessage({ type: 'success', text: 'Admin profile updated successfully!' });
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error: any) {
+            setIsSaving(false);
+            setMessage({ type: 'error', text: error.message || 'Update failed' });
+        }
     };
 
     if (!user) return <div className="p-8 text-center text-pterosub">Loading profile...</div>;
@@ -124,6 +140,16 @@ export default function AdminProfilePage() {
                             <Key size={16} className="text-pteroblue" /> Change Admin Password
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2 space-y-2">
+                                <label className="text-xs font-medium text-pterosub">Current Password *</label>
+                                <Input
+                                    type={showPassword ? "text" : "password"}
+                                    value={currentPassword}
+                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    placeholder="Enter current password"
+                                />
+                                <p className="text-[10px] text-pterosub italic">Required when changing password for security.</p>
+                            </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-pterosub">New Password</label>
                                 <div className="relative">

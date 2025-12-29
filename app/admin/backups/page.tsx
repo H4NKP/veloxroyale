@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Button } from '@/components/ui/core';
+import { Card, Button, cn } from '@/components/ui/core';
 import {
     Download,
     Trash2,
@@ -14,7 +14,8 @@ import {
     Calendar,
     HardDrive,
     RotateCcw,
-    CheckCircle2
+    CheckCircle2,
+    Upload
 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useTranslation } from '@/components/LanguageContext';
@@ -165,6 +166,54 @@ export default function BackupsPage() {
         }
     };
 
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Reset input value to allow re-uploading same file if needed
+        e.target.value = '';
+
+        setIsCreating(true); // Re-use the loading state or create a separate one
+        setError(null);
+        setProgress(0);
+        setProgressStatus("Uploading backup file...");
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            // Simulated upload progress (basic)
+            setProgress(30);
+
+            const res = await fetch('/api/backups/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            setProgress(80);
+
+            const data = await res.json();
+
+            if (res.ok) {
+                setProgress(100);
+                setProgressStatus("Upload complete!");
+                setBackups([data.backup, ...backups]);
+
+                setTimeout(() => {
+                    setIsCreating(false);
+                    setProgress(0);
+                }, 1500);
+            } else {
+                setError(data.error);
+                setIsCreating(false);
+            }
+
+        } catch (err: any) {
+            setError("Upload failed: " + err.message);
+            setIsCreating(false);
+        }
+    };
+
     const formatSize = (bytes: number) => {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
@@ -180,23 +229,42 @@ export default function BackupsPage() {
                     <h1 className="text-3xl font-bold text-pterotext">{t('systemBackups')}</h1>
                     <p className="text-pterosub mt-1">{t('systemBackupsDesc')}</p>
                 </div>
-                <Button
-                    variant="primary"
-                    onClick={handleCreateBackup}
-                    disabled={isCreating}
-                >
-                    {isCreating ? (
-                        <>
-                            <Loader2 className="mr-2 animate-spin" size={18} />
-                            {t('operationInProgress')}
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="mr-2" size={18} />
-                            {t('createBackupNow')}
-                        </>
-                    )}
-                </Button>
+                <div className="flex gap-2">
+                    <label className="cursor-pointer">
+                        <input
+                            type="file"
+                            accept=".tar.gz,.json"
+                            onChange={handleUpload}
+                            className="hidden"
+                            disabled={isCreating}
+                        />
+                        <div className={cn(
+                            "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background",
+                            "bg-pterocard hover:bg-pteroborder text-pterotext h-10 px-4 py-2 border border-pteroborder"
+                        )}>
+                            <Upload className="mr-2" size={18} />
+                            {t('uploadBackup') || "Upload Backup"}
+                        </div>
+                    </label>
+
+                    <Button
+                        variant="primary"
+                        onClick={handleCreateBackup}
+                        disabled={isCreating}
+                    >
+                        {isCreating ? (
+                            <>
+                                <Loader2 className="mr-2 animate-spin" size={18} />
+                                {t('operationInProgress')}
+                            </>
+                        ) : (
+                            <>
+                                <Plus className="mr-2" size={18} />
+                                {t('createBackupNow')}
+                            </>
+                        )}
+                    </Button>
+                </div>
             </div>
 
             {error && (
